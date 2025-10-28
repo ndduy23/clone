@@ -1,0 +1,113 @@
+@model BookDb.Views.Documents.EditModel
+
+@{
+    ViewData["Title"] = Model.Title;
+}
+
+<style>
+    .field-updated-by-other {
+        animation: fieldHighlight 2s ease-in-out;
+        border-color: #0d6efd !important;
+    }
+
+    @@keyframes fieldHighlight {
+        0%, 100% { background-color: transparent; }
+        50% { background-color: #cfe2ff; }
+    }
+
+    .editing-indicator {
+        animation: slideInDown 0.3s ease-out;
+        margin-bottom: 10px;
+    }
+
+    @@keyframes slideInDown {
+        from { transform: translateY(-100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+
+    #editing-indicators-container {
+        position: sticky;
+        top: 70px;
+        z-index: 1000;
+        margin-bottom: 20px;
+    }
+</style>
+
+<div id="editing-indicators-container"></div>
+
+<h2>Sửa tài liệu</h2>
+
+<form asp-action="Edit" asp-route-id="@Model.GetDocumentId()" enctype="multipart/form-data" method="post" id="editDocumentForm">
+    <div class="mb-3">
+        <label class="form-label">Tiêu đề</label>
+        <input name="title" id="title" value="@Model.Document.Title" class="form-control" required data-field-name="title" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Lĩnh vực</label>
+        <input name="category" id="category" value="@Model.Document.Category" class="form-control" data-field-name="category" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Tác giả</label>
+        <input name="author" id="author" value="@Model.Document.Author" class="form-control" data-field-name="author" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">File mới (nếu muốn thay thế)</label>
+        <input type="file" name="file" class="form-control" />
+        @if (Model.HasFile())
+        {
+            <p>File hiện tại: <a href="@Model.GetFileUrl()" target="_blank">📄 Xem file</a></p>
+        }
+    </div>
+
+    <button type="submit" class="btn btn-primary">Cập nhật</button>
+    <a asp-action="Index" class="btn btn-secondary">Hủy</a>
+</form>
+
+@section Scripts {
+    <script src="~/js/document-editing-realtime.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Initialize real-time editing
+            const documentId = @Model.GetDocumentId();
+            const documentTitle = '@Model.GetSafeTitle()';
+            const userName = '@Model.GenerateUserName()'; // TODO: Get from authentication
+            
+            window.DocumentEditingRealtime.init(documentId, userName);
+
+            // Track when user starts editing
+            let editingStarted = false;
+            $('input[data-field-name], textarea[data-field-name]').on('focus', function() {
+                if (!editingStarted) {
+                    editingStarted = true;
+                    window.DocumentEditingRealtime.startEditing(documentTitle);
+                }
+            });
+
+            // Track field changes and notify in real-time
+            let debounceTimers = {};
+            $('input[data-field-name], textarea[data-field-name]').on('input', function() {
+                const $field = $(this);
+                const fieldName = $field.data('field-name');
+                const newValue = $field.val();
+
+                clearTimeout(debounceTimers[fieldName]);
+                debounceTimers[fieldName] = setTimeout(function() {
+                    window.DocumentEditingRealtime.notifyFieldChange(fieldName, newValue);
+                }, 500);
+            });
+
+            // Stop editing notifications
+            $(window).on('beforeunload', function() {
+                window.DocumentEditingRealtime.stopEditing();
+            });
+
+            $('#editDocumentForm').on('submit', function() {
+                window.DocumentEditingRealtime.stopEditing();
+            });
+        });
+    </script>
+}
+

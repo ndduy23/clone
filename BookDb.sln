@@ -1,0 +1,57 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36414.22
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BookDb", "BookDb\BookDb.csproj", "{6CB34163-B1DA-4BC9-AA46-594DD58D4B34}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Document.Service.Test", "Document.Service.Test\Document.Service.Test.csproj", "{78E298D5-2DB7-4815-AC7F-D2080E05BF6E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bookmark.Service.Test", "Bookmark.Service.Test\Bookmark.Service.Test.csproj", "{91B21934-32AD-424C-92D4-E2B7ADB17B81}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Document.Pages.Service.Test", "Document.Pages.Service.Test\Document.Pages.Service.Test.csproj", "{72464418-73FA-491F-96B5-F91D4758E088}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Notification.Service.Test", "Notification.Service.Test\Notification.Service.Test.csproj", "{C2C463C2-45E8-47B8-837A-7768735AD83D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6CB34163-B1DA-4BC9-AA46-594DD58D4B34}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6CB34163-B1DA-4BC9-AA46-594DD58D4B34}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6CB34163-B1DA-4BC9-AA46-594DD58D4B34}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6CB34163-B1DA-4BC9-AA46-594DD58D4B34}.Release|Any CPU.Build.0 = Release|Any CPU
+		{78E298D5-2DB7-4815-AC7F-D2080E05BF6E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{78E298D5-2DB7-4815-AC7F-D2080E05BF6E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{78E298D5-2DB7-4815-AC7F-D2080E05BF6E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{78E298D5-2DB7-4815-AC7F-D2080E05BF6E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{91B21934-32AD-424C-92D4-E2B7ADB17B81}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{91B21934-32AD-424C-92D4-E2B7ADB17B81}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{91B21934-32AD-424C-92D4-E2B7ADB17B81}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{91B21934-32AD-424C-92D4-E2B7ADB17B81}.Release|Any CPU.Build.0 = Release|Any CPU
+		{72464418-73FA-491F-96B5-F91D4758E088}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{72464418-73FA-491F-96B5-F91D4758E088}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{72464418-73FA-491F-96B5-F91D4758E088}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{72464418-73FA-491F-96B5-F91D4758E088}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C2C463C2-45E8-47B8-837A-7768735AD83D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C2C463C2-45E8-47B8-837A-7768735AD83D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C2C463C2-45E8-47B8-837A-7768735AD83D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C2C463C2-45E8-47B8-837A-7768735AD83D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{78E298D5-2DB7-4815-AC7F-D2080E05BF6E} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{91B21934-32AD-424C-92D4-E2B7ADB17B81} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{72464418-73FA-491F-96B5-F91D4758E088} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+		{C2C463C2-45E8-47B8-837A-7768735AD83D} = {02EA681E-C7D8-13C7-8484-4AC65E1B71E8}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {961F9A06-BA8E-4F8C-AC8E-3A8CF8AD573C}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,312 @@
+@model BookDb.Views.Documents.ViewDocumentModel
+
+@{
+    ViewData["Title"] = Model.Title;
+}
+
+<style>
+    #addBookmarkBtn {
+        transition: all 0.3s ease;
+        min-width: 150px;
+    }
+    
+    #addBookmarkBtn:disabled {
+        cursor: not-allowed;
+    }
+    
+    .bookmark-success {
+        animation: bookmarkPulse 0.5s ease-out;
+    }
+    
+    @@keyframes bookmarkPulse {
+        0%, 100% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.05);
+        }
+    }
+</style>
+
+<h2>@Model.GetDocumentTitle()</h2>
+<p>
+    <b>Tác giả:</b> @Model.GetDocumentAuthor() <br />
+    <b>Lĩnh vực:</b> @Model.GetDocumentCategory() <br />
+    <b>Ngày tạo:</b> @Model.GetFormattedDate() <br />
+    <b>Mô tả:</b> @Model.GetDocumentDescription()
+</p>
+
+<!-- Nút chuyển đổi giữa bản gốc và bản phân trang -->
+<div class="mb-3 d-flex align-items-center">
+    @if (Model.IsPagedMode())
+    {
+        <a asp-action="ViewDocument" asp-route-id="@Model.GetDocumentId()" asp-route-mode="original" class="btn btn-info">
+            Xem bản gốc
+        </a>
+    }
+    else
+    {
+        <a asp-action="ViewDocument" asp-route-id="@Model.GetDocumentId()" asp-route-mode="paged" class="btn btn-info">
+            Xem bản phân trang
+        </a>
+    }
+
+    @* Page controls placed next to the mode switch *@
+    @if (Model.IsPagedMode() && Model.HasPages() && Model.TotalPages > 0)
+    {
+        <div class="ms-3">
+            <div class="btn-group" role="group" aria-label="Trang">
+                @if (Model.HasPreviousPage())
+                {
+                    <a asp-action="ViewDocument" asp-route-id="@Model.GetDocumentId()" asp-route-mode="paged" asp-route-page="@Model.GetPreviousPageNumber()" class="btn btn-secondary">←</a>
+                }
+
+                <a class="btn btn-light disabled">@Model.GetPageInfo()</a>
+
+                @if (Model.HasNextPage())
+                {
+                    <a asp-action="ViewDocument" asp-route-id="@Model.GetDocumentId()" asp-route-mode="paged" asp-route-page="@Model.GetNextPageNumber()" class="btn btn-secondary">→</a>
+                    <a asp-action="ViewDocument" asp-route-id="@Model.GetDocumentId()" asp-route-mode="paged" asp-route-page="@Model.TotalPages" class="btn btn-secondary">Trang cuối »</a>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Hiển thị PDF và HTML (Excel) -->
+@if (Model.IsPagedMode())
+{
+    if (Model.HasPages())
+    {
+        var currentPageDoc = Model.GetCurrentPageDocument();
+
+        if (currentPageDoc != null)
+        {
+            var iframeSrc = Url.Content(Model.GetIFrameSource());
+
+            // If the generated page is HTML (from Excel), show it directly. Otherwise (PDF) show inside an iframe as well.
+            if (Model.IsHtmlContent())
+            {
+                <iframe id="docFrame" src="@iframeSrc" width="80%" height="1000px" style="border:1px solid #ccc"></iframe>
+            }
+            else
+            {
+                <iframe id="docFrame" src="@iframeSrc" width="60%" height="1200px" style="border:1px solid #ccc"></iframe>
+            }
+
+            <!-- Hiển thị thông tin trang hiện tại / tổng trang -->
+            @if (Model.TotalPages > 0)
+            {
+                <div class="mt-2">@Model.GetPageInfo()</div>
+            }
+
+            @if (Model.CurrentPageHasBookmark())
+            {
+                <button type="button" class="btn btn-warning" onclick="window.NotificationHub.showLocal('⚠️ Bookmark đã tồn tại trên trang này', 'warning');">Đã có Bookmark</button>
+            }
+            else
+            {
+                <form id="bookmarkForm" asp-controller="Bookmarks" asp-action="Create" method="post" style="display:inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="documentPageId" value="@currentPageDoc.Id" />
+                    <button type="submit" class="btn btn-primary" id="addBookmarkBtn">
+                        <span class="spinner-border spinner-border-sm d-none" id="bookmarkSpinner"></span>
+                        Thêm Bookmark
+                    </button>
+                </form>
+            }
+
+        }
+        else
+        {
+            <p class="text-danger">Trang không tồn tại.</p>
+        }
+    }
+    else
+    {
+        <p class="text-danger">Tài liệu chưa được phân trang.</p>
+    }
+}
+else
+{
+    if (Model.HasFile())
+    {
+        <iframe id="docFrame" src="@Url.Content(Model.GetFilePath())" width="60%" height="1200px" style="border:1px solid #ccc"></iframe>
+    }
+    else
+    {
+        <p class="text-danger">Không tìm thấy file gốc.</p>
+    }
+}
+
+<script src="/lib/microsoft/signalr/dist/browser/signalr.js"></script>
+<script src="/js/document-notify.js"></script>
+<script>
+    (function () {
+        var docId = @Model.GetDocumentId();
+        var currentPageId = @Model.GetCurrentPageId();
+        var currentPageNumber = @Model.Page;
+        var mode = '@Model.Mode';
+
+        function onPageChanged(payload, action) {
+            try {
+                console.log('Page change detected:', action, payload);
+
+                if (action === 'updated') {
+                    // If the changed page is the same as currently displayed, reload the iframe
+                    if (payload && payload.PageId && payload.PageId === currentPageId) {
+                        var frame = document.getElementById('docFrame');
+                        if (frame) {
+                            // Add timestamp to force reload
+                            var src = frame.src.split('?')[0];
+                            frame.src = src + '?t=' + new Date().getTime();
+                            console.info('Page updated externally, reloaded iframe.');
+                        }
+                    } else if (payload && payload.PageNumber && payload.PageNumber === currentPageNumber) {
+                        // Reload the entire page to reflect changes
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1000);
+                    }
+                } else if (action === 'added') {
+                    // A new page was added, optionally reload to show updated page count
+                    console.info('New page added to document');
+                    // Could show a notification to refresh
+                    if (confirm('Có trang mới được thêm vào. Tải lại trang để xem?')) {
+                        location.reload();
+                    }
+                } else if (action === 'deleted') {
+                    // A page was deleted
+                    if (payload && payload.PageId && payload.PageId === currentPageId) {
+                        // Current page was deleted, redirect to first page or document list
+                        alert('Trang hiện tại đã bị xóa. Chuyển về trang đầu.');
+                        window.location.href = '/documents/view/@Model.GetDocumentId()?mode=paged&page=1';
+                    } else if (payload && payload.PageNumber && payload.PageNumber === currentPageNumber) {
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1000);
+                    }
+                }
+            } catch (e) {
+                console.error('Error handling page change:', e);
+            }
+        }
+
+        // Start SignalR notification system
+        startDocumentNotify(docId, onPageChanged);
+
+        // Leave group when navigating away
+        window.addEventListener('beforeunload', function () {
+            stopDocumentNotify(docId);
+        });
+
+        // Auto-reload iframe periodically as a fallback (optional)
+        // Uncomment if you want periodic refresh
+        /*
+        setInterval(function() {
+            var frame = document.getElementById('docFrame');
+            if (frame && mode === 'paged') {
+                var src = frame.src.split('?')[0];
+                frame.src = src + '?t=' + new Date().getTime();
+            }
+        }, 30000); // Every 30 seconds
+        */
+    })();
+</script>
+
+<script>
+    // Handle bookmark form submission with AJAX
+    $(document).ready(function() {
+        $('#bookmarkForm').on('submit', function(e) {
+            e.preventDefault(); // Prevent default form submission
+            
+            const form = $(this);
+            const submitBtn = $('#addBookmarkBtn');
+            const spinner = $('#bookmarkSpinner');
+            
+            // Disable button and show spinner
+            submitBtn.prop('disabled', true);
+            spinner.removeClass('d-none');
+            
+            $.ajax({
+                url: form.attr('action'),
+                type: 'POST',
+                data: form.serialize(),
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Show success notification with custom styling
+                        window.NotificationHub.showLocal('✅ ' + response.message, 'success');
+                        
+                        // Add success animation to button
+                        submitBtn.addClass('bookmark-success');
+                        
+                        // Change button to indicate bookmark exists
+                        setTimeout(function() {
+                            submitBtn.removeClass('btn-primary bookmark-success').addClass('btn-warning');
+                            submitBtn.html('✓ Đã có Bookmark');
+                            submitBtn.prop('disabled', true);
+                        }, 500);
+                        
+                        // Optional: Reload page after a delay to show bookmark state
+                        setTimeout(function() {
+                            location.reload();
+                        }, 2000);
+                    } else {
+                        // Show error notification with appropriate icon
+                        if (response.message && (response.message.includes('tồn tại') || response.message.includes('đã có'))) {
+                            window.NotificationHub.showLocal('⚠️ ' + response.message, 'warning');
+                            
+                            // Change button appearance for existing bookmark
+                            submitBtn.removeClass('btn-primary').addClass('btn-warning');
+                            submitBtn.html('✓ Đã có Bookmark');
+                            submitBtn.prop('disabled', true);
+                        } else {
+                            window.NotificationHub.showLocal('❌ ' + response.message, 'error');
+                            
+                            // Re-enable button for other errors
+                            submitBtn.prop('disabled', false);
+                            spinner.addClass('d-none');
+                        }
+                    }
+                },
+                error: function(xhr) {
+                    // Show error notification
+                    let errorMessage = 'Có lỗi xảy ra khi lưu bookmark';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMessage = xhr.responseJSON.message;
+                    }
+                    window.NotificationHub.showLocal('❌ ' + errorMessage, 'error');
+                    
+                    // Re-enable button
+                    submitBtn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                },
+                complete: function() {
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+        
+        // Show TempData messages if exists
+        @if (TempData["SuccessMessage"] != null)
+        {
+            <text>
+            window.NotificationHub.showLocal('✅ @TempData["SuccessMessage"]', 'success');
+            </text>
+        }
+        
+        @if (TempData["ErrorMessage"] != null)
+        {
+            <text>
+            window.NotificationHub.showLocal('❌ @TempData["ErrorMessage"]', 'error');
+            </text>
+        }
+    });
+</script>
+
+<p class="mt-3">
+    <a asp-action="Index" class="btn btn-secondary">← Quay lại danh sách</a>
+</p>

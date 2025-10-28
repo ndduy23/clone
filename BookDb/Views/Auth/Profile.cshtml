@@ -1,0 +1,259 @@
+﻿@{
+    ViewData["Title"] = "Hồ sơ người dùng";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card shadow">
+                <div class="card-body text-center">
+                    <div class="user-avatar-large mb-3" id="profileAvatar">U</div>
+                    <h4 id="profileFullName">Loading...</h4>
+                    <p class="text-muted" id="profileEmail">loading@example.com</p>
+                    <span class="badge bg-primary" id="profileRoles">User</span>
+                </div>
+            </div>
+
+            <div class="card shadow mt-3">
+                <div class="card-body">
+                    <h6 class="card-title">Thông tin tài khoản</h6>
+                    <ul class="list-unstyled">
+                        <li><small class="text-muted">Ngày tạo:</small> <span id="profileCreatedAt">-</span></li>
+                        <li><small class="text-muted">Đăng nhập cuối:</small> <span id="profileLastLogin">-</span></li>
+                        <li><small class="text-muted">Trạng thái:</small> <span class="badge bg-success">Hoạt động</span></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5>Đổi mật khẩu</h5>
+                </div>
+                <div class="card-body">
+                    <div id="changePasswordError" class="alert alert-danger d-none"></div>
+                    <div id="changePasswordSuccess" class="alert alert-success d-none"></div>
+
+                    <form id="changePasswordForm">
+                        <div class="mb-3">
+                            <label for="currentPassword" class="form-label">Mật khẩu hiện tại</label>
+                            <input type="password" class="form-control" id="currentPassword" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="newPassword" class="form-label">Mật khẩu mới</label>
+                            <input type="password" class="form-control" id="newPassword" minlength="6" required>
+                            <small class="text-muted">Tối thiểu 6 ký tự</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="confirmNewPassword" class="form-label">Xác nhận mật khẩu mới</label>
+                            <input type="password" class="form-control" id="confirmNewPassword" required>
+                            <div class="invalid-feedback">Mật khẩu không khớp</div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" id="changePasswordBtn">
+                            <span id="changePasswordText">Đổi mật khẩu</span>
+                            <span id="changePasswordSpinner" class="spinner-border spinner-border-sm d-none ms-2"></span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            loadUserProfile();
+
+            // Password confirmation validation
+            $('#confirmNewPassword').on('input', function() {
+                const newPassword = $('#newPassword').val();
+                const confirmPassword = $(this).val();
+
+                if (newPassword !== confirmPassword) {
+                    $(this).addClass('is-invalid');
+                } else {
+                    $(this).removeClass('is-invalid').addClass('is-valid');
+                }
+            });
+
+            // Change password form
+            $('#changePasswordForm').on('submit', function(e) {
+                e.preventDefault();
+                changePassword();
+            });
+
+            function loadUserProfile() {
+                $.ajax({
+                    url: '/api/auth/me',
+                    type: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + window.JwtHelper.getToken()
+                    },
+                    success: function(response) {
+                        if (response.success && response.user) {
+                            const user = response.user;
+
+                            $('#profileFullName').text(user.fullName || user.email);
+                            $('#profileEmail').text(user.email);
+
+                            // Update avatar
+                            const initials = getInitials(user.fullName || user.email);
+                            $('#profileAvatar').text(initials);
+
+                            // Get roles (from localStorage for now)
+                            const storedUser = window.JwtHelper.getUser();
+                            if (storedUser && storedUser.roles) {
+                                $('#profileRoles').text(storedUser.roles.join(', '));
+                            }
+                        }
+                    },
+                    error: function() {
+                        showError('Không thể tải thông tin người dùng');
+                    }
+                });
+            }
+
+            function changePassword() {
+                const currentPassword = $('#currentPassword').val();
+                const newPassword = $('#newPassword').val();
+                const confirmNewPassword = $('#confirmNewPassword').val();
+
+                // Validate
+                if (!currentPassword || !newPassword || !confirmNewPassword) {
+                    showPasswordError('Vui lòng điền đầy đủ thông tin');
+                    return;
+                }
+
+                if (newPassword !== confirmNewPassword) {
+                    showPasswordError('Mật khẩu mới không khớp');
+                    return;
+                }
+
+                if (newPassword.length < 6) {
+                    showPasswordError('Mật khẩu mới phải có ít nhất 6 ký tự');
+                    return;
+                }
+
+                // Disable button
+                $('#changePasswordBtn').prop('disabled', true);
+                $('#changePasswordText').text('Đang xử lý...');
+                $('#changePasswordSpinner').removeClass('d-none');
+                hidePasswordMessages();
+
+                $.ajax({
+                    url: '/api/auth/change-password',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    headers: {
+                        'Authorization': 'Bearer ' + window.JwtHelper.getToken()
+                    },
+                    data: JSON.stringify({
+                        currentPassword: currentPassword,
+                        newPassword: newPassword,
+                        confirmNewPassword: confirmNewPassword
+                    }),
+                    success: function(response) {
+                        if (response.success) {
+                            showPasswordSuccess('✅ Đổi mật khẩu thành công!');
+                            $('#changePasswordForm')[0].reset();
+
+                            // Log out after 2 seconds
+                            setTimeout(function() {
+                                window.JwtHelper.logout();
+                            }, 2000);
+                        } else {
+                            showPasswordError(response.message || 'Đổi mật khẩu thất bại');
+                        }
+                        resetPasswordButton();
+                    },
+                    error: function(xhr) {
+                        let errorMsg = 'Đổi mật khẩu thất bại';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            errorMsg = xhr.responseJSON.message;
+                        } else if (xhr.status === 400) {
+                            errorMsg = 'Mật khẩu hiện tại không đúng';
+                        }
+                        showPasswordError('❌ ' + errorMsg);
+                        resetPasswordButton();
+                    }
+                });
+            }
+
+            function showPasswordError(message) {
+                $('#changePasswordError').html(message).removeClass('d-none');
+                $('#changePasswordSuccess').addClass('d-none');
+            }
+
+            function showPasswordSuccess(message) {
+                $('#changePasswordSuccess').html(message).removeClass('d-none');
+                $('#changePasswordError').addClass('d-none');
+            }
+
+            function hidePasswordMessages() {
+                $('#changePasswordError, #changePasswordSuccess').addClass('d-none');
+            }
+
+            function resetPasswordButton() {
+                $('#changePasswordBtn').prop('disabled', false);
+                $('#changePasswordText').text('Đổi mật khẩu');
+                $('#changePasswordSpinner').addClass('d-none');
+            }
+
+            function getInitials(name) {
+                if (!name) return 'U';
+                const parts = name.split(' ');
+                if (parts.length >= 2) {
+                    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                }
+                return name.substring(0, 2).toUpperCase();
+            }
+        });
+    </script>
+}
+
+<style>
+    .user-avatar-large {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 36px;
+        margin: 0 auto;
+    }
+
+    .card {
+        border-radius: 10px;
+        border: none;
+    }
+
+    .card-header {
+        background: #f8f9fa;
+        border-bottom: 2px solid #e9ecef;
+        border-radius: 10px 10px 0 0 !important;
+    }
+
+    .form-control:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    }
+
+    .list-unstyled li {
+        padding: 8px 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+        .list-unstyled li:last-child {
+            border-bottom: none;
+        }
+</style>

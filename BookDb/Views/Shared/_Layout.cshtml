@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - BookDb</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/BookDb.styles.css" asp-append-version="true" />
+    <style>
+        #notification-container {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            z-index: 9999;
+            width: 350px;
+        }
+
+        .notification-item {
+            margin-bottom: 10px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @@keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @@keyframes slideInRight {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @@keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+
+        .notification-badge {
+            position: relative;
+            cursor: pointer;
+        }
+
+            .notification-badge .badge {
+                position: absolute;
+                top: -8px;
+                right: -8px;
+                font-size: 10px;
+            }
+
+        /* Notification Panel Styles */
+        #notificationPanel {
+            position: fixed;
+            top: 60px;
+            right: 20px;
+            width: 400px;
+            max-height: 600px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+            z-index: 10000;
+            display: none;
+            animation: slideInRight 0.3s ease-out;
+        }
+
+            #notificationPanel .panel-header {
+                padding: 15px;
+                border-bottom: 1px solid #eee;
+                background: #f8f9fa;
+                border-radius: 8px 8px 0 0;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+                #notificationPanel .panel-header h5 {
+                    margin: 0;
+                    font-size: 16px;
+                    font-weight: 600;
+                }
+
+            #notificationPanel .notification-list {
+                max-height: 450px;
+                overflow-y: auto;
+                padding: 10px;
+            }
+
+            #notificationPanel .notification-item {
+                padding: 12px;
+                border-bottom: 1px solid #eee;
+                transition: background-color 0.2s;
+                cursor: pointer;
+            }
+
+                #notificationPanel .notification-item:hover {
+                    background-color: #f8f9fa;
+                }
+
+                #notificationPanel .notification-item.unread {
+                    background-color: #e7f3ff;
+                    border-left: 3px solid #0d6efd;
+                }
+
+                #notificationPanel .notification-item.read {
+                    opacity: 0.7;
+                }
+
+            #notificationPanel .notification-message {
+                font-size: 14px;
+                margin-bottom: 5px;
+                word-wrap: break-word;
+            }
+
+            #notificationPanel .panel-footer {
+                padding: 10px 15px;
+                border-top: 1px solid #eee;
+                background: #f8f9fa;
+                text-align: center;
+                border-radius: 0 0 8px 8px;
+            }
+
+                #notificationPanel .panel-footer button {
+                    font-size: 13px;
+                }
+
+            /* Scrollbar styling */
+            #notificationPanel .notification-list::-webkit-scrollbar {
+                width: 6px;
+            }
+
+            #notificationPanel .notification-list::-webkit-scrollbar-track {
+                background: #f1f1f1;
+            }
+
+            #notificationPanel .notification-list::-webkit-scrollbar-thumb {
+                background: #888;
+                border-radius: 3px;
+            }
+
+                #notificationPanel .notification-list::-webkit-scrollbar-thumb:hover {
+                    background: #555;
+                }
+
+        .connection-status {
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* User dropdown styles */
+        .user-dropdown {
+            cursor: pointer;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #0d6efd;
+            color: white;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
+            <div class="container-fluid">
+                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">BookDb</a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
+                        aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
+                    <ul class="navbar-nav flex-grow-1">
+                        <li class="nav-item">
+                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
+                        </li>
+                        <li class="nav-item auth-required" style="display:none;">
+                            <a class="nav-link text-dark" asp-area="" asp-controller="Documents" asp-action="Index">Tài liệu</a>
+                        </li>
+                        <li class="nav-item auth-required" style="display:none;">
+                            <a class="nav-link text-dark" asp-area="" asp-controller="Documents" asp-action="Create">Thêm mới</a>
+                        </li>
+                        <li class="nav-item auth-required" style="display:none;">
+                            <a class="nav-link text-dark" asp-area="" asp-controller="Bookmarks" asp-action="Index">Bookmark</a>
+                        </li>
+                    </ul>
+                    <ul class="navbar-nav">
+                        <!-- Notification Icon (Auth required) -->
+                        <li class="nav-item auth-required" style="display:none;">
+                            <a class="nav-link notification-badge" href="#" id="notificationIcon" onclick="window.NotificationHub.toggleNotificationPanel(); return false;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="bi bi-bell" viewBox="0 0 16 16">
+                                    <path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zM8 1.918l-.797.161A4.002 4.002 0 0 0 4 6c0 .628-.134 2.197-.459 3.742-.16.767-.376 1.566-.663 2.258h10.244c-.287-.692-.502-1.49-.663-2.258C12.134 8.197 12 6.628 12 6a4.002 4.002 0 0 0-3.203-3.92L8 1.917zM14.22 12c.223.447.481.801.78 1H1c.299-.199.557-.553.78-1C2.68 10.2 3 6.88 3 6c0-2.42 1.72-4.44 4.005-4.901a1 1 0 1 1 1.99 0A5.002 5.002 0 0 1 13 6c0 .88.32 4.2 1.22 6z" />
+                                </svg>
+                                <span class="badge bg-danger" id="notificationCount" style="display:none;">0</span>
+                            </a>
+                        </li>
+
+                        <!-- User Dropdown (Auth required) -->
+                        <li class="nav-item dropdown auth-required" style="display:none;">
+                            <a class="nav-link dropdown-toggle user-dropdown" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span class="user-avatar" id="userAvatar">U</span>
+                                <span id="authUserName">User</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                                <li><h6 class="dropdown-header" id="authUserEmail">user@example.com</h6></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="/auth/profile">Hồ sơ</a></li>
+                                <li><a class="dropdown-item logout-btn" href="#">Đăng xuất</a></li>
+                            </ul>
+                        </li>
+
+                        <!-- Login/Register Links (Guest only) -->
+                        <li class="nav-item guest-only">
+                            <a class="nav-link text-dark" href="/auth/login">Đăng nhập</a>
+                        </li>
+                        <li class="nav-item guest-only">
+                            <a class="nav-link text-dark" href="/auth/register">Đăng ký</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
+
+    <!-- Notification Panel -->
+    <div id="notificationPanel">
+        <div class="panel-header">
+            <div>
+                <h5>Thông báo</h5>
+                <div class="connection-status">
+                    <small id="connectionStatus" class="text-muted">● Đang kết nối...</small>
+                </div>
+            </div>
+            <button type="button" class="btn-close" onclick="window.NotificationHub.toggleNotificationPanel()"></button>
+        </div>
+        <div class="notification-list">
+            <div class="text-center text-muted p-4">Không có thông báo</div>
+        </div>
+        <div class="panel-footer">
+            <button class="btn btn-sm btn-outline-secondary" onclick="window.NotificationHub.clearAllNotifications()">
+                Xóa tất cả
+            </button>
+        </div>
+    </div>
+
+    <div class="container">
+        <main role="main" class="pb-3">
+            @RenderBody()
+        </main>
+    </div>
+
+    <footer class="border-top footer text-muted">
+        <div class="container">
+            &copy; 2025 - BookDb - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
+        </div>
+    </footer>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/lib/microsoft/signalr/dist/browser/signalr.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="~/js/jwt-helper.js" asp-append-version="true"></script>
+    <script src="~/js/global-notifications.js" asp-append-version="true"></script>
+
+    <script>
+        // Update user avatar with initials
+        $(document).ready(function() {
+            const user = window.JwtHelper.getUser();
+            if (user) {
+                const initials = getInitials(user.fullName || user.email);
+                $('#userAvatar').text(initials);
+            }
+        });
+
+        function getInitials(name) {
+            if (!name) return 'U';
+            const parts = name.split(' ');
+            if (parts.length >= 2) {
+                return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+            }
+            return name.substring(0, 2).toUpperCase();
+        }
+    </script>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

@@ -1,0 +1,23 @@
+@model BookDb.Views.Documents.IndexModel
+
+@foreach (var item in Model.Documents)
+{
+    <tr data-document-id="@item.Id">
+        <td>@item.Title</td>
+        <td>@item.Category</td>
+        <td>@item.Author</td>
+        <td>@Model.GetFormattedDate(item.CreatedAt)</td>
+        <td>
+            <a asp-action="ViewDocument" asp-route-id="@item.Id" class="btn btn-sm btn-success">Xem</a>
+            <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-sm btn-warning">Sửa</a>
+            <button type="button" class="btn btn-sm btn-danger delete-btn" data-id="@item.Id">Xóa</button>
+        </td>
+    </tr>
+}
+
+@if (!Model.HasDocuments())
+{
+    <tr>
+        <td colspan="5" class="text-center text-muted py-4">Không có tài liệu nào</td>
+    </tr>
+}
