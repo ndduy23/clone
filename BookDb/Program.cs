@@ -110,6 +110,9 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+
 // Add Authorization Policies
 builder.Services.AddAuthorization(options =>
 {
@@ -138,7 +141,25 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole(Roles.Admin, Roles.Manager));
 });
 
-builder.Services.AddControllersWithViews();
+// Add CORS (must be before AddControllers)
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
+
+// Add Controllers and Views
+builder.Services.AddControllersWithViews()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = null; // Keep original casing
+        options.JsonSerializerOptions.WriteIndented = true;
+    });
+
 builder.Services.AddRazorPages();
 
 // Add SignalR
@@ -155,15 +176,11 @@ builder.Services.Configure<RazorViewEngineOptions>(options =>
     options.ViewLocationFormats.Add("/MyViews/{1}/{0}" + RazorViewEngine.ViewExtension);
 });
 
-// Add CORS
-builder.Services.AddCors(options =>
+// Add Antiforgery
+builder.Services.AddAntiforgery(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
+    options.HeaderName = "X-CSRF-TOKEN";
+    options.SuppressXFrameOptionsHeader = false;
 });
 
 // ====== Build app ======

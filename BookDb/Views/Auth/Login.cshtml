@@ -13,19 +13,20 @@
 
                 <div id="loginError" class="alert alert-danger d-none" role="alert"></div>
                 <div id="loginSuccess" class="alert alert-success d-none" role="alert"></div>
+                <div id="debugInfo" class="alert alert-info d-none" role="alert" style="font-size: 12px; max-height: 200px; overflow-y: auto;"></div>
 
                 <form id="loginForm">
                     <div class="mb-3">
                         <label for="email" class="form-label">Email</label>
                         <input type="email" class="form-control" id="email" name="email"
-                               placeholder="email@example.com" required>
+                               placeholder="email@example.com" value="admin@bookdb.com" required>
                         <div class="invalid-feedback">Vui lòng nhập email hợp lệ</div>
                     </div>
 
                     <div class="mb-3">
                         <label for="password" class="form-label">Mật khẩu</label>
                         <input type="password" class="form-control" id="password" name="password"
-                               placeholder="Nhập mật khẩu" required>
+                               placeholder="Nhập mật khẩu" value="Admin@123" required>
                         <div class="invalid-feedback">Vui lòng nhập mật khẩu</div>
                     </div>
 
@@ -37,6 +38,10 @@
                     <button type="submit" class="btn btn-primary w-100 mb-2" id="loginBtn">
                         <span id="loginText">Đăng nhập</span>
                         <span id="loginSpinner" class="spinner-border spinner-border-sm d-none ms-2"></span>
+                    </button>
+
+                    <button type="button" class="btn btn-secondary w-100 mb-2" onclick="testAPIEndpoints()">
+                        <i class="bi bi-wifi"></i> Kiểm tra API
                     </button>
                 </form>
 
@@ -60,20 +65,72 @@
 
 @section Scripts {
     <script>
-        $(document).ready(function() {
-            // Auto-fill demo account (optional)
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('demo') === 'admin') {
-                $('#email').val('admin@bookdb.com');
-                $('#password').val('Admin@123');
+        console.log('🔧 Login page loaded');
+        console.log('🌐 Current URL:', window.location.href);
+        console.log('📦 jQuery version:', typeof $ !== 'undefined' ? $.fn.jquery : 'Not loaded');
+        console.log('🔑 JwtHelper loaded:', typeof window.JwtHelper !== 'undefined');
+
+        // Test API Endpoints
+        window.testAPIEndpoints = async function() {
+            showDebug('⏳ Đang kiểm tra các API endpoints...\n');
+
+            const endpoints = [
+                { url: '/api/auth/login', method: 'POST', data: { email: 'test@test.com', password: '123456' } },
+                { url: '/api/auth/register', method: 'POST', data: { email: 'test@test.com', password: '123456', confirmPassword: '123456' } }
+            ];
+
+            for (const endpoint of endpoints) {
+                try {
+                    showDebug(`📡 Testing ${endpoint.method} ${endpoint.url}...`);
+
+                    const response = await fetch(endpoint.url, {
+                        method: endpoint.method,
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: endpoint.data ? JSON.stringify(endpoint.data) : undefined
+                    });
+
+                    const contentType = response.headers.get('content-type');
+                    showDebug(`   Status: ${response.status} ${response.statusText}`);
+                    showDebug(`   Content-Type: ${contentType}`);
+
+                    if (contentType && contentType.includes('application/json')) {
+                        const data = await response.json();
+                        showDebug(`   ✅ Response: ${JSON.stringify(data).substring(0, 100)}...\n`);
+                    } else {
+                        const text = await response.text();
+                        showDebug(`   ❌ Not JSON! Response: ${text.substring(0, 200)}...\n`);
+                    }
+                } catch (error) {
+                    showDebug(`   ❌ Error: ${error.message}\n`);
+                }
             }
+
+            showDebug('✅ API test completed!');
+        };
+
+        function showDebug(message) {
+            console.log('DEBUG:', message);
+            const debugDiv = $('#debugInfo');
+            debugDiv.append(message + '\n').removeClass('d-none');
+            debugDiv.scrollTop(debugDiv[0].scrollHeight);
+        }
+
+        $(document).ready(function() {
+            console.log('✅ Document ready');
 
             $('#loginForm').on('submit', function(e) {
                 e.preventDefault();
+                console.log('📝 Form submitted');
 
                 const email = $('#email').val().trim();
                 const password = $('#password').val();
                 const rememberMe = $('#rememberMe').is(':checked');
+
+                console.log('📧 Email:', email);
+                console.log('🔒 Password length:', password.length);
+                console.log('💾 Remember me:', rememberMe);
 
                 // Validate
                 if (!email || !password) {
@@ -87,50 +144,115 @@
                 $('#loginSpinner').removeClass('d-none');
                 hideMessages();
 
-                // Call API
+                const loginData = {
+                    email: email,
+                    password: password,
+                    rememberMe: rememberMe
+                };
+
+                console.log('🚀 Sending login request...');
+                console.log('📤 URL: /api/auth/login');
+                console.log('📤 Data:', loginData);
+
+                // Call API with detailed error handling
                 $.ajax({
                     url: '/api/auth/login',
                     type: 'POST',
                     contentType: 'application/json',
-                    data: JSON.stringify({
-                        email: email,
-                        password: password,
-                        rememberMe: rememberMe
-                    }),
-                    success: function(response) {
+                    dataType: 'json',
+                    data: JSON.stringify(loginData),
+                    beforeSend: function(xhr) {
+                        console.log('📨 Request headers:', xhr.getAllResponseHeaders());
+                    },
+                    success: function(response, status, xhr) {
+                        console.log('✅ Login SUCCESS!');
+                        console.log('📥 Status:', xhr.status);
+                        console.log('📥 Response:', response);
+
                         if (response.success) {
+                            console.log('🎉 Login successful!');
+                            console.log('🔑 Token length:', response.token?.length);
+                            console.log('👤 User:', response.user);
+
                             // Save tokens
-                            window.JwtHelper.saveTokens(response.token, response.refreshToken);
-                            window.JwtHelper.saveUser(response.user);
+                            if (window.JwtHelper) {
+                                console.log('💾 Saving via JwtHelper...');
+                                window.JwtHelper.saveTokens(response.token, response.refreshToken);
+                                window.JwtHelper.saveUser(response.user);
+                            } else {
+                                console.log('💾 Saving via localStorage (fallback)...');
+                                localStorage.setItem('token', response.token);
+                                localStorage.setItem('refreshToken', response.refreshToken);
+                                localStorage.setItem('user', JSON.stringify(response.user));
+                            }
 
                             showSuccess('✅ Đăng nhập thành công! Đang chuyển hướng...');
 
                             // Redirect after 1 second
                             setTimeout(function() {
+                                console.log('🔄 Redirecting to /documents');
                                 window.location.href = '/documents';
                             }, 1000);
                         } else {
+                            console.error('❌ Login failed:', response.message);
                             showError(response.message || 'Đăng nhập thất bại');
                             resetButton();
                         }
                     },
-                    error: function(xhr) {
+                    error: function(xhr, status, error) {
+                        console.error('❌ AJAX ERROR!');
+                        console.error('📛 Status:', xhr.status);
+                        console.error('📛 Status Text:', xhr.statusText);
+                        console.error('📛 Error:', error);
+                        console.error('📛 Response Text:', xhr.responseText?.substring(0, 500));
+                        console.error('📛 Content-Type:', xhr.getResponseHeader('Content-Type'));
+
                         let errorMsg = 'Đăng nhập thất bại';
-                        if (xhr.responseJSON && xhr.responseJSON.message) {
-                            errorMsg = xhr.responseJSON.message;
-                        } else if (xhr.status === 401) {
-                            errorMsg = 'Email hoặc mật khẩu không đúng';
-                        } else if (xhr.status === 0) {
-                            errorMsg = 'Không thể kết nối đến server';
+
+                        // Check if response is JSON
+                        const contentType = xhr.getResponseHeader('Content-Type');
+                        if (contentType && contentType.includes('application/json')) {
+                            try {
+                                const response = JSON.parse(xhr.responseText);
+                                console.log('📄 Parsed error response:', response);
+                                errorMsg = response.message || errorMsg;
+                            } catch (e) {
+                                console.error('❌ Failed to parse JSON:', e);
+                            }
+                        } else {
+                            console.error('❌ Response is not JSON! Content-Type:', contentType);
+                            console.error('📄 HTML Response (first 500 chars):', xhr.responseText?.substring(0, 500));
                         }
-                        showError('❌ ' + errorMsg);
+
+                        // Specific error messages
+                        if (xhr.status === 0) {
+                            errorMsg = '❌ Không thể kết nối đến server.\n\n' +
+                                      '🔍 Kiểm tra:\n' +
+                                      '1. Server đang chạy chưa?\n' +
+                                      '2. URL có đúng không?\n' +
+                                      '3. Có lỗi CORS không?\n\n' +
+                                      '💡 Mở Console (F12) để xem chi tiết';
+                        } else if (xhr.status === 404) {
+                            errorMsg = '❌ API endpoint không tồn tại (404).\n\n' +
+                                      '🔍 Kiểm tra:\n' +
+                                      '1. AuthApiController.cs đã tạo chưa?\n' +
+                                      '2. Route [Route("api/auth")] đã đúng chưa?\n' +
+                                      '3. Server đã khởi động lại chưa?';
+                        } else if (xhr.status === 401) {
+                            errorMsg = '❌ Email hoặc mật khẩu không đúng';
+                        } else if (xhr.status >= 500) {
+                            errorMsg = '❌ Lỗi server (500).\n\n' +
+                                      '🔍 Kiểm tra server logs';
+                        }
+
+                        showError(errorMsg);
                         resetButton();
                     }
                 });
             });
 
             function showError(message) {
-                $('#loginError').html(message).removeClass('d-none');
+                $('#loginError').html('<pre style="white-space: pre-wrap; font-size: 12px;">' + message + '</pre>').removeClass('d-none');
                 $('#loginSuccess').addClass('d-none');
             }
 
@@ -140,7 +262,7 @@
             }
 
             function hideMessages() {
-                $('#loginError, #loginSuccess').addClass('d-none');
+                $('#loginError, #loginSuccess, #debugInfo').addClass('d-none');
             }
 
             function resetButton() {
@@ -155,6 +277,12 @@
                     $('#loginForm').submit();
                 }
             });
+
+            // Auto-test API on page load
+            console.log('🧪 Auto-testing API endpoints in 2 seconds...');
+            setTimeout(function() {
+                testAPIEndpoints();
+            }, 2000);
         });
     </script>
 }
@@ -178,5 +306,10 @@
         border-radius: 8px;
         padding: 10px;
         font-weight: 500;
+    }
+
+    #debugInfo pre {
+        margin: 0;
+        font-size: 11px;
     }
 </style>

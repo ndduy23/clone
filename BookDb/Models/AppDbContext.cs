@@ -10,6 +10,7 @@ namespace BookDb.Models
         public DbSet<Document> Documents { get; set; }
         public DbSet<DocumentPage> DocumentPages { get; set; }
         public DbSet<Bookmark> Bookmarks { get; set; }
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder builder)
         {
@@ -31,6 +32,23 @@ namespace BookDb.Models
                 .WithOne(p => p.Bookmark)
                 .HasForeignKey<Bookmark>(b => b.DocumentPageId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // RefreshToken configuration
+            modelBuilder.Entity<RefreshToken>()
+                .HasOne(rt => rt.User)
+                .WithMany()
+                .HasForeignKey(rt => rt.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<RefreshToken>()
+                .HasIndex(rt => rt.Token)
+                .IsUnique();
+
+            modelBuilder.Entity<RefreshToken>()
+                .HasIndex(rt => rt.UserId);
+
+            modelBuilder.Entity<RefreshToken>()
+                .HasIndex(rt => new { rt.UserId, rt.IsRevoked, rt.IsUsed });
         }
     }
 }

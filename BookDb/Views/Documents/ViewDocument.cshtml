@@ -5,26 +5,46 @@
 }
 
 <style>
-    #addBookmarkBtn {
+    #addBookmarkBtn, #deleteBookmarkBtn {
         transition: all 0.3s ease;
         min-width: 150px;
     }
-    
-    #addBookmarkBtn:disabled {
-        cursor: not-allowed;
-    }
-    
+
+        #addBookmarkBtn:disabled, #deleteBookmarkBtn:disabled {
+            cursor: not-allowed;
+        }
+
     .bookmark-success {
         animation: bookmarkPulse 0.5s ease-out;
     }
-    
+
     @@keyframes bookmarkPulse {
-        0%, 100% {
-            transform: scale(1);
-        }
-        50% {
-            transform: scale(1.05);
-        }
+        0%, 100%
+
+    {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+
+    }
+
+    .bookmark-actions {
+        display: inline-flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .bookmark-info {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 15px;
+        background: #fff3cd;
+        border-radius: 6px;
+        border: 1px solid #ffc107;
     }
 </style>
 
@@ -100,22 +120,35 @@
                 <div class="mt-2">@Model.GetPageInfo()</div>
             }
 
-            @if (Model.CurrentPageHasBookmark())
-            {
-                <button type="button" class="btn btn-warning" onclick="window.NotificationHub.showLocal('⚠️ Bookmark đã tồn tại trên trang này', 'warning');">Đã có Bookmark</button>
-            }
-            else
-            {
-                <form id="bookmarkForm" asp-controller="Bookmarks" asp-action="Create" method="post" style="display:inline">
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="documentPageId" value="@currentPageDoc.Id" />
-                    <button type="submit" class="btn btn-primary" id="addBookmarkBtn">
-                        <span class="spinner-border spinner-border-sm d-none" id="bookmarkSpinner"></span>
-                        Thêm Bookmark
-                    </button>
-                </form>
-            }
+            <!-- Bookmark Actions -->
+            <div class="bookmark-actions mt-3">
+                @if (Model.CurrentPageHasBookmark())
+                {
+                    var bookmark = currentPageDoc.Bookmark;
+                    <div class="bookmark-info">
+                        <span>🔖 <strong>Đã có Bookmark:</strong> @(bookmark?.Title ?? "Không có tiêu đề")</span>
+                    </div>
 
+                    <form id="deleteBookmarkForm" asp-controller="Bookmarks" asp-action="Delete" asp-route-id="@bookmark?.Id" method="post" style="display:inline">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-danger" id="deleteBookmarkBtn">
+                            <span class="spinner-border spinner-border-sm d-none" id="deleteBookmarkSpinner"></span>
+                            <i class="bi bi-trash"></i> Xóa Bookmark
+                        </button>
+                    </form>
+                }
+                else
+                {
+                    <form id="bookmarkForm" asp-controller="Bookmarks" asp-action="Create" method="post" style="display:inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="documentPageId" value="@currentPageDoc.Id" />
+                        <button type="submit" class="btn btn-primary" id="addBookmarkBtn">
+                            <span class="spinner-border spinner-border-sm d-none" id="bookmarkSpinner"></span>
+                            <i class="bi bi-bookmark-plus"></i> Thêm Bookmark
+                        </button>
+                    </form>
+                }
+            </div>
         }
         else
         {
@@ -199,35 +232,24 @@ else
         window.addEventListener('beforeunload', function () {
             stopDocumentNotify(docId);
         });
-
-        // Auto-reload iframe periodically as a fallback (optional)
-        // Uncomment if you want periodic refresh
-        /*
-        setInterval(function() {
-            var frame = document.getElementById('docFrame');
-            if (frame && mode === 'paged') {
-                var src = frame.src.split('?')[0];
-                frame.src = src + '?t=' + new Date().getTime();
-            }
-        }, 30000); // Every 30 seconds
-        */
     })();
 </script>
 
 <script>
     // Handle bookmark form submission with AJAX
     $(document).ready(function() {
+        // Add bookmark
         $('#bookmarkForm').on('submit', function(e) {
-            e.preventDefault(); // Prevent default form submission
-            
+            e.preventDefault();
+
             const form = $(this);
             const submitBtn = $('#addBookmarkBtn');
             const spinner = $('#bookmarkSpinner');
-            
+
             // Disable button and show spinner
             submitBtn.prop('disabled', true);
             spinner.removeClass('d-none');
-            
+
             $.ajax({
                 url: form.attr('action'),
                 type: 'POST',
@@ -237,72 +259,104 @@ else
                 },
                 success: function(response) {
                     if (response.success) {
-                        // Show success notification with custom styling
+                        // Show success notification
                         window.NotificationHub.showLocal('✅ ' + response.message, 'success');
-                        
-                        // Add success animation to button
-                        submitBtn.addClass('bookmark-success');
-                        
-                        // Change button to indicate bookmark exists
-                        setTimeout(function() {
-                            submitBtn.removeClass('btn-primary bookmark-success').addClass('btn-warning');
-                            submitBtn.html('✓ Đã có Bookmark');
-                            submitBtn.prop('disabled', true);
-                        }, 500);
-                        
-                        // Optional: Reload page after a delay to show bookmark state
+
+                        // Reload page to show delete button
                         setTimeout(function() {
                             location.reload();
-                        }, 2000);
+                        }, 1000);
                     } else {
-                        // Show error notification with appropriate icon
-                        if (response.message && (response.message.includes('tồn tại') || response.message.includes('đã có'))) {
-                            window.NotificationHub.showLocal('⚠️ ' + response.message, 'warning');
-                            
-                            // Change button appearance for existing bookmark
-                            submitBtn.removeClass('btn-primary').addClass('btn-warning');
-                            submitBtn.html('✓ Đã có Bookmark');
-                            submitBtn.prop('disabled', true);
-                        } else {
-                            window.NotificationHub.showLocal('❌ ' + response.message, 'error');
-                            
-                            // Re-enable button for other errors
-                            submitBtn.prop('disabled', false);
-                            spinner.addClass('d-none');
-                        }
+                        handleBookmarkError(response.message);
+                        submitBtn.prop('disabled', false);
+                        spinner.addClass('d-none');
                     }
                 },
                 error: function(xhr) {
-                    // Show error notification
                     let errorMessage = 'Có lỗi xảy ra khi lưu bookmark';
                     if (xhr.responseJSON && xhr.responseJSON.message) {
                         errorMessage = xhr.responseJSON.message;
                     }
-                    window.NotificationHub.showLocal('❌ ' + errorMessage, 'error');
-                    
-                    // Re-enable button
+                    handleBookmarkError(errorMessage);
                     submitBtn.prop('disabled', false);
-                    spinner.addClass('d-none');
-                },
-                complete: function() {
                     spinner.addClass('d-none');
                 }
             });
         });
-        
+
+        // Delete bookmark
+        $('#deleteBookmarkForm').on('submit', function(e) {
+            e.preventDefault();
+
+            if (!confirm('Bạn có chắc muốn xóa bookmark này?')) {
+                return;
+            }
+
+            const form = $(this);
+            const submitBtn = $('#deleteBookmarkBtn');
+            const spinner = $('#deleteBookmarkSpinner');
+
+            // Disable button and show spinner
+            submitBtn.prop('disabled', true);
+            spinner.removeClass('d-none');
+
+            $.ajax({
+                url: form.attr('action'),
+                type: 'POST',
+                data: form.serialize(),
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Show success notification
+                        window.NotificationHub.showLocal('✅ Đã xóa bookmark thành công', 'success');
+
+                        // Reload page to show add button
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1000);
+                    } else {
+                        window.NotificationHub.showLocal('❌ ' + (response.message || 'Không thể xóa bookmark'), 'error');
+                        submitBtn.prop('disabled', false);
+                        spinner.addClass('d-none');
+                    }
+                },
+                error: function(xhr) {
+                    let errorMessage = 'Có lỗi xảy ra khi xóa bookmark';
+                    if (xhr.status === 404) {
+                        errorMessage = 'Không tìm thấy bookmark';
+                    } else if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMessage = xhr.responseJSON.message;
+                    }
+                    window.NotificationHub.showLocal('❌ ' + errorMessage, 'error');
+                    submitBtn.prop('disabled', false);
+                    spinner.addClass('d-none');
+                }
+            });
+        });
+
+        function handleBookmarkError(message) {
+            if (message && (message.includes('tồn tại') || message.includes('đã có'))) {
+                window.NotificationHub.showLocal('⚠️ ' + message, 'warning');
+            } else {
+                window.NotificationHub.showLocal('❌ ' + message, 'error');
+            }
+        }
+
         // Show TempData messages if exists
         @if (TempData["SuccessMessage"] != null)
         {
-            <text>
-            window.NotificationHub.showLocal('✅ @TempData["SuccessMessage"]', 'success');
-            </text>
+                <text>
+                window.NotificationHub.showLocal('✅ @TempData["SuccessMessage"]', 'success');
+                </text>
         }
-        
+
         @if (TempData["ErrorMessage"] != null)
         {
-            <text>
-            window.NotificationHub.showLocal('❌ @TempData["ErrorMessage"]', 'error');
-            </text>
+                <text>
+                window.NotificationHub.showLocal('❌ @TempData["ErrorMessage"]', 'error');
+                </text>
         }
     });
 </script>

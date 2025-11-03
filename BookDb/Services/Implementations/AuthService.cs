@@ -1,5 +1,6 @@
 ﻿using BookDb.Models;
 using Microsoft.AspNetCore.Identity;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
 namespace BookDb.Services.Implementations
@@ -64,16 +65,21 @@ namespace BookDb.Services.Implementations
 
                 _logger.LogInformation("User {Email} registered successfully", model.Email);
 
-                // Generate token
+                // Generate tokens
                 var roles = await _userManager.GetRolesAsync(user);
-                var token = _jwtService.GenerateToken(user, roles);
-                var refreshToken = _jwtService.GenerateRefreshToken();
+                var accessToken = _jwtService.GenerateToken(user, roles);
+
+                // Extract JWT ID from access token
+                var jwtId = GetJwtId(accessToken);
+
+                // Generate and save refresh token to database
+                var refreshToken = await _jwtService.GenerateRefreshTokenAsync(user, jwtId);
 
                 return new AuthResponseDto
                 {
                     Success = true,
                     Message = "Đăng ký thành công",
-                    Token = token,
+                    Token = accessToken,
                     RefreshToken = refreshToken,
                     Expiration = DateTime.UtcNow.AddHours(1),
                     User = new UserDto
@@ -134,8 +140,13 @@ namespace BookDb.Services.Implementations
 
                 // Generate tokens
                 var roles = await _userManager.GetRolesAsync(user);
-                var token = _jwtService.GenerateToken(user, roles);
-                var refreshToken = _jwtService.GenerateRefreshToken();
+                var accessToken = _jwtService.GenerateToken(user, roles);
+
+                // Extract JWT ID from access token
+                var jwtId = GetJwtId(accessToken);
+
+                // Generate and save refresh token to database
+                var refreshToken = await _jwtService.GenerateRefreshTokenAsync(user, jwtId);
 
                 _logger.LogInformation("User {Email} logged in successfully", model.Email);
 
@@ -143,7 +154,7 @@ namespace BookDb.Services.Implementations
                 {
                     Success = true,
                     Message = "Đăng nhập thành công",
-                    Token = token,
+                    Token = accessToken,
                     RefreshToken = refreshToken,
                     Expiration = DateTime.UtcNow.AddHours(1),
                     User = new UserDto
@@ -180,12 +191,25 @@ namespace BookDb.Services.Implementations
                 }
 
                 var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userId))
+                var jwtId = principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+
+                if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(jwtId))
                 {
                     return new AuthResponseDto
                     {
                         Success = false,
                         Message = "Token không hợp lệ"
+                    };
+                }
+
+                // Validate refresh token against database
+                var isValid = await _jwtService.ValidateRefreshTokenAsync(model.RefreshToken, jwtId);
+                if (!isValid)
+                {
+                    return new AuthResponseDto
+                    {
+                        Success = false,
+                        Message = "Refresh token không hợp lệ hoặc đã hết hạn"
                     };
                 }
 
@@ -199,15 +223,25 @@ namespace BookDb.Services.Implementations
                     };
                 }
 
+                // Mark old refresh token as used
+                await _jwtService.MarkRefreshTokenAsUsedAsync(model.RefreshToken);
+
                 // Generate new tokens
                 var roles = await _userManager.GetRolesAsync(user);
-                var newToken = _jwtService.GenerateToken(user, roles);
-                var newRefreshToken = _jwtService.GenerateRefreshToken();
+                var newAccessToken = _jwtService.GenerateToken(user, roles);
+
+                // Extract new JWT ID
+                var newJwtId = GetJwtId(newAccessToken);
+
+                // Generate new refresh token and save to database
+                var newRefreshToken = await _jwtService.GenerateRefreshTokenAsync(user, newJwtId);
+
+                _logger.LogInformation("Tokens refreshed successfully for user {UserId}", userId);
 
                 return new AuthResponseDto
                 {
                     Success = true,
-                    Token = newToken,
+                    Token = newAccessToken,
                     RefreshToken = newRefreshToken,
                     Expiration = DateTime.UtcNow.AddHours(1),
                     User = new UserDto
@@ -246,6 +280,9 @@ namespace BookDb.Services.Implementations
                     return false;
                 }
 
+                // Revoke all refresh tokens after password change for security
+                await _jwtService.RevokeAllUserTokensAsync(userId, "Password changed");
+
                 _logger.LogInformation("Password changed successfully for user {UserId}", userId);
                 return true;
             }
@@ -259,6 +296,43 @@ namespace BookDb.Services.Implementations
         public async Task<User?> GetUserByIdAsync(string userId)
         {
             return await _userManager.FindByIdAsync(userId);
+        }
+
+        public async Task LogoutAsync(string userId, string refreshToken)
+        {
+            try
+            {
+                // Revoke the specific refresh token
+                await _jwtService.RevokeRefreshTokenAsync(refreshToken, "User logged out");
+
+                _logger.LogInformation("User {UserId} logged out", userId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during logout for user {UserId}", userId);
+            }
+        }
+
+        public async Task LogoutAllDevicesAsync(string userId)
+        {
+            try
+            {
+                // Revoke all refresh tokens
+                await _jwtService.RevokeAllUserTokensAsync(userId, "Logout from all devices");
+
+                _logger.LogInformation("User {UserId} logged out from all devices", userId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error logging out all devices for user {UserId}", userId);
+            }
+        }
+
+        private string GetJwtId(string token)
+        {
+            var handler = new JwtSecurityTokenHandler();
+            var jwtToken = handler.ReadJwtToken(token);
+            return jwtToken.Id;
         }
     }
 }
