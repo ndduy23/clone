@@ -1,363 +1,996 @@
 @model BookDb.Views.Documents.ViewDocumentModel
 
+@using System.IO
+@using Azure.Core
 @{
-    ViewData["Title"] = Model.Title;
+ ViewData["Title"] = Model.GetDocumentTitle();
+ var filePath = Model.GetFilePath();
+ var ext = System.IO.Path.GetExtension(filePath)?.ToLowerInvariant() ?? "";
+ var fileUrl = Url.Content(filePath);
+ var absoluteFileUrl = string.Concat(Context.Request.Scheme, "://", Context.Request.Host, fileUrl);
+ var officeExts = new[] { ".doc", ".docx", ".xls", ".xlsx" };
+ var useOfficeViewer = officeExts.Contains(ext);
 }
 
-<style>
-    #documentViewer {
-        width: 100%;
-        height: 800px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-    }
+@if (ext == ".pdf")
+{
+ <style>
+ :root {
+ --primary-color: #667eea;
+ --secondary-color: #764ba2;
+ }
 
-    .document-toolbar {
-        background: #f8f9fa;
-        padding: 15px;
-        border-radius: 8px;
-        margin-bottom: 15px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 10px;
-    }
+ body {
+ overflow: hidden;
+ }
 
-    .page-controls {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
+ .viewer-container {
+ display: flex;
+ height: calc(100vh -60px);
+ position: fixed;
+ top:60px;
+ left:0;
+ right:0;
+ bottom:0;
+ }
 
-    .search-controls {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
+ /* Sidebar */
+ .sidebar {
+ width:300px;
+ background: #f8f9fa;
+ border-right:1px solid #dee2e6;
+ overflow-y: auto;
+ transition: transform0.3s;
+ }
 
-    .bookmark-controls {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
+ .sidebar.collapsed {
+ transform: translateX(-300px);
+ }
 
-    .page-info {
-        font-weight: 500;
-        padding: 5px 15px;
-        background: white;
-        border-radius: 4px;
-    }
+ .sidebar-header {
+ padding:15px;
+ background: white;
+ border-bottom:1px solid #dee2e6;
+ position: sticky;
+ top:0;
+ z-index:10;
+ }
 
-    #searchBox {
-        min-width: 250px;
-    }
+ .sidebar-tabs {
+ display: flex;
+ border-bottom:1px solid #dee2e6;
+ }
 
-    .highlight {
-        background-color: yellow;
-        padding: 2px 0;
-    }
+ .sidebar-tab {
+ flex:1;
+ padding:10px;
+ text-align: center;
+ cursor: pointer;
+ border-bottom:3px solid transparent;
+ transition: all0.3s;
+ }
 
-    .current-highlight {
-        background-color: orange;
-    }
-</style>
+ .sidebar-tab.active {
+ border-bottom-color: var(--primary-color);
+ color: var(--primary-color);
+ font-weight: bold;
+ }
 
-<div class="container-fluid">
-    <h2>@Model.GetDocumentTitle()</h2>
+ .sidebar-content {
+ padding:15px;
+ }
 
-    <div class="row mb-3">
-        <div class="col-md-12">
-            <p class="mb-1"><strong>Tác giả:</strong> @Model.GetDocumentAuthor()</p>
-            <p class="mb-1"><strong>Lĩnh vực:</strong> @Model.GetDocumentCategory()</p>
-            <p class="mb-1"><strong>Ngày tạo:</strong> @Model.GetFormattedDate()</p>
-            @if (!string.IsNullOrEmpty(Model.GetDocumentDescription()))
-            {
-                <p class="mb-1"><strong>Mô tả:</strong> @Model.GetDocumentDescription()</p>
-            }
-        </div>
-    </div>
+ /* Main Viewer */
+ .pdf-viewer-main {
+ flex:1;
+ display: flex;
+ flex-direction: column;
+ background: #525659;
+ position: relative;
+ }
 
-    <div class="document-toolbar">
-        <!-- Page Navigation -->
-        <div class="page-controls">
-            <button type="button" class="btn btn-secondary btn-sm" id="prevPage" disabled>
-                <i class="bi bi-chevron-left"></i> Trước
-            </button>
-            <span class="page-info">
-                Trang <span id="currentPage">1</span> / <span id="totalPages">1</span>
-            </span>
-            <button type="button" class="btn btn-secondary btn-sm" id="nextPage">
-                Sau <i class="bi bi-chevron-right"></i>
-            </button>
-        </div>
+ /* Toolbar */
+ .pdf-toolbar {
+ background: #323639;
+ padding:10px20px;
+ display: flex;
+ align-items: center;
+ gap:10px;
+ color: white;
+ flex-wrap: wrap;
+ }
 
-        <!-- Search -->
-        <div class="search-controls">
-            <input type="text"
-                   class="form-control form-control-sm"
-                   id="searchBox"
-                   placeholder="Tìm kiếm trong tài liệu...">
-            <button type="button" class="btn btn-info btn-sm" id="searchBtn">
-                <i class="bi bi-search"></i> Tìm
-            </button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" id="clearSearch" style="display:none;">
-                <i class="bi bi-x"></i>
-            </button>
-        </div>
+ .toolbar-group {
+ display: flex;
+ align-items: center;
+ gap:5px;
+ padding:010px;
+ border-right:1px solid #525659;
+ }
 
-        <!-- Bookmark -->
-        <div class="bookmark-controls auth-only">
-            <button type="button" class="btn btn-primary btn-sm" id="addBookmarkBtn">
-                <i class="bi bi-bookmark-plus"></i> Thêm Bookmark
-            </button>
-            <button type="button" class="btn btn-danger btn-sm" id="deleteBookmarkBtn" style="display:none;">
-                <i class="bi bi-trash"></i> Xóa Bookmark
-            </button>
-        </div>
+ .toolbar-group:last-child {
+ border-right: none;
+ }
 
-        <!-- Guest message -->
-        <div class="guest-only" style="display:none;">
-            <small class="text-muted">
-                <i class="bi bi-lock"></i>
-                <a href="/auth/login">Đăng nhập</a> để sử dụng bookmark
-            </small>
-        </div>
-    </div>
+ .toolbar-btn {
+ background: #525659;
+ color: white;
+ border: none;
+ padding:8px12px;
+ border-radius:4px;
+ cursor: pointer;
+ transition: background0.2s;
+ }
 
-    <!-- Document Viewer -->
-    <div id="documentViewer">
-        <iframe id="docFrame"
-                src="@Url.Content(Model.GetFilePath())"
-                style="width:100%; height:100%; border:none;">
-        </iframe>
-    </div>
+ .toolbar-btn:hover {
+ background: #666;
+ }
 
-    <div class="mt-3">
-        <a asp-action="Index" class="btn btn-secondary">
-            <i class="bi bi-arrow-left"></i> Quay lại danh sách
-        </a>
-    </div>
-</div>
+ .toolbar-btn:disabled {
+ opacity:0.5;
+ cursor: not-allowed;
+ }
 
-@section Scripts {
-    <script>
-        $(document).ready(function() {
-            const documentId = @Model.GetDocumentId();
-            const documentTitle = '@Model.GetSafeTitle()';
-            let currentPage = 1;
-            let totalPages = 1;
-            let currentBookmarkId = null;
+ .toolbar-btn.active {
+ background: var(--primary-color);
+ }
 
-            // Initialize viewer based on file type
-            const fileType = '@Model.GetFileExtension()';
+ .page-input {
+ width:50px;
+ text-align: center;
+ background: #525659;
+ border:1px solid #666;
+ color: white;
+ padding:5px;
+ border-radius:4px;
+ }
 
-            if (fileType === '.pdf') {
-                initPdfViewer();
-            } else {
-                // For non-PDF, hide page controls
-                $('.page-controls').hide();
-            }
+ /* Canvas Container */
+ .canvas-container {
+ flex:1;
+ overflow: auto;
+ display: flex;
+ justify-content: center;
+ align-items: flex-start;
+ padding:20px;
+ position: relative;
+ }
 
-            // Page navigation
-            $('#prevPage').on('click', function() {
-                if (currentPage > 1) {
-                    currentPage--;
-                    updatePage();
-                }
-            });
+ #pdfCanvas {
+ box-shadow:04px20px rgba(0,0,0,0.5);
+ background: white;
+ cursor: crosshair;
+ }
 
-            $('#nextPage').on('click', function() {
-                if (currentPage < totalPages) {
-                    currentPage++;
-                    updatePage();
-                }
-            });
+ .text-layer {
+ position: absolute;
+ left:0;
+ top:0;
+ right:0;
+ bottom:0;
+ overflow: hidden;
+ opacity:0.2;
+ line-height:1.0;
+ }
 
-            function updatePage() {
-                $('#currentPage').text(currentPage);
-                updatePageControls();
-                checkBookmark();
-            }
+ .text-layer > span {
+ color: transparent;
+ position: absolute;
+ white-space: pre;
+ cursor: text;
+ transform-origin:0%0%;
+ }
 
-            function updatePageControls() {
-                $('#prevPage').prop('disabled', currentPage <= 1);
-                $('#nextPage').prop('disabled', currentPage >= totalPages);
-            }
+ /* Highlight Layer */
+ .highlight-layer {
+ position: absolute;
+ left:0;
+ top:0;
+ pointer-events: none;
+ }
 
-            // Search functionality
-            $('#searchBtn, #searchBox').on('click keypress', function(e) {
-                if (e.type === 'click' || e.which === 13) {
-                    performSearch();
-                }
-            });
+ .highlight {
+ position: absolute;
+ background: rgba(255,255,0,0.4);
+ border:1px solid rgba(255,200,0,0.6);
+ pointer-events: all;
+ cursor: pointer;
+ }
 
-            $('#clearSearch').on('click', function() {
-                $('#searchBox').val('');
-                clearSearch();
-                $(this).hide();
-            });
+ .highlight:hover {
+ background: rgba(255,255,0,0.6);
+ }
 
-            function performSearch() {
-                const query = $('#searchBox').val().trim();
-                if (!query) return;
+ /* Search Panel */
+ .search-panel {
+ position: absolute;
+ top:10px;
+ right:10px;
+ background: white;
+ padding:15px;
+ border-radius:8px;
+ box-shadow:04px12px rgba(0,0,0,0.15);
+ z-index:100;
+ display: none;
+ min-width:300px;
+ }
 
-                // For PDF, use PDF.js search API
-                // For Office docs, use browser find
-                if (fileType === '.pdf') {
-                    searchInPdf(query);
-                } else {
-                    searchInIframe(query);
-                }
+ .search-panel.active {
+ display: block;
+ }
 
-                $('#clearSearch').show();
-            }
+ .search-results {
+ max-height:200px;
+ overflow-y: auto;
+ margin-top:10px;
+ }
 
-            function searchInIframe(query) {
-                const iframe = document.getElementById('docFrame');
-                if (!iframe || !iframe.contentWindow) return;
+ .search-result-item {
+ padding:8px;
+ cursor: pointer;
+ border-bottom:1px solid #eee;
+ transition: background0.2s;
+ }
 
-                try {
-                    const found = iframe.contentWindow.find(query, false, false, true, false, true, false);
-                    if (!found) {
-                        alert('Không tìm thấy: ' + query);
-                    }
-                } catch (e) {
-                    console.warn('Search not supported in this document type');
-                }
-            }
+ .search-result-item:hover {
+ background: #f0f0f0;
+ }
 
-            function clearSearch() {
-                const iframe = document.getElementById('docFrame');
-                if (iframe && iframe.contentWindow) {
-                    try {
-                        iframe.contentWindow.find('', false, false, false, false, true, false);
-                    } catch (e) {}
-                }
-            }
+ .search-result-item.active {
+ background: #e3f2fd;
+ }
 
-            // Bookmark management
-            $('#addBookmarkBtn').on('click', function() {
-                addBookmark();
-            });
+ /* Bookmarks List */
+ .bookmark-item {
+ background: white;
+ padding:12px;
+ margin-bottom:10px;
+ border-radius:6px;
+ border-left:4px solid var(--primary-color);
+ cursor: pointer;
+ transition: all0.2s;
+ }
 
-            $('#deleteBookmarkBtn').on('click', function() {
-                if (confirm('Xóa bookmark này?')) {
-                    deleteBookmark();
-                }
-            });
+ .bookmark-item:hover {
+ box-shadow:02px8px rgba(0,0,0,0.1);
+ transform: translateX(5px);
+ }
 
-            function checkBookmark() {
-                if (!window.JwtHelper || !window.JwtHelper.isAuthenticated()) {
-                    return;
-                }
+ .bookmark-text {
+ font-size:0.9em;
+ color: #666;
+ margin-top:5px;
+ display: -webkit-box;
+ -webkit-line-clamp:2;
+ -webkit-box-orient: vertical;
+ overflow: hidden;
+ }
 
-                $.ajax({
-                    url: '/api/bookmarks/check',
-                    type: 'GET',
-                    data: { documentId: documentId, pageNumber: currentPage },
-                    headers: {
-                        'Authorization': 'Bearer ' + window.JwtHelper.getToken()
-                    },
-                    success: function(response) {
-                        if (response.exists) {
-                            currentBookmarkId = response.bookmarkId;
-                            $('#addBookmarkBtn').hide();
-                            $('#deleteBookmarkBtn').show();
-                        } else {
-                            currentBookmarkId = null;
-                            $('#addBookmarkBtn').show();
-                            $('#deleteBookmarkBtn').hide();
-                        }
-                    },
-                    error: function() {
-                        // If error, show add button
-                        $('#addBookmarkBtn').show();
-                        $('#deleteBookmarkBtn').hide();
-                    }
-                });
-            }
+ .bookmark-page {
+ font-size:0.8em;
+ color: #999;
+ margin-top:5px;
+ }
 
-            function addBookmark() {
-                const url = window.location.href;
+ .delete-bookmark {
+ float: right;
+ color: #dc3545;
+ cursor: pointer;
+ padding:2px8px;
+ border-radius:3px;
+ }
 
-                $.ajax({
-                    url: '/api/bookmarks/create',
-                    type: 'POST',
-                    contentType: 'application/json',
-                    headers: {
-                        'Authorization': 'Bearer ' + window.JwtHelper.getToken()
-                    },
-                    data: JSON.stringify({
-                        documentId: documentId,
-                        pageNumber: currentPage,
-                        title: `${documentTitle} - Trang ${currentPage}`,
-                        url: url
-                    }),
-                    success: function(response) {
-                        if (response.success) {
-                            window.NotificationHub.showLocal('✅ Đã thêm bookmark', 'success');
-                            checkBookmark();
-                        } else {
-                            window.NotificationHub.showLocal('❌ ' + response.message, 'error');
-                        }
-                    },
-                    error: function(xhr) {
-                        let msg = 'Không thể thêm bookmark';
-                        if (xhr.responseJSON && xhr.responseJSON.message) {
-                            msg = xhr.responseJSON.message;
-                        }
-                        window.NotificationHub.showLocal('❌ ' + msg, 'error');
-                    }
-                });
-            }
+ .delete-bookmark:hover {
+ background: #dc3545;
+ color: white;
+ }
 
-            function deleteBookmark() {
-                if (!currentBookmarkId) return;
+ /* Thumbnails */
+ .thumbnail-item {
+ margin-bottom:15px;
+ cursor: pointer;
+ border:2px solid transparent;
+ border-radius:4px;
+ padding:5px;
+ transition: all0.2s;
+ }
 
-                $.ajax({
-                    url: '/api/bookmarks/' + currentBookmarkId,
-                    type: 'DELETE',
-                    headers: {
-                        'Authorization': 'Bearer ' + window.JwtHelper.getToken()
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            window.NotificationHub.showLocal('✅ Đã xóa bookmark', 'success');
-                            checkBookmark();
-                        } else {
-                            window.NotificationHub.showLocal('❌ ' + response.message, 'error');
-                        }
-                    },
-                    error: function() {
-                        window.NotificationHub.showLocal('❌ Không thể xóa bookmark', 'error');
-                    }
-                });
-            }
+ .thumbnail-item:hover {
+ border-color: var(--primary-color);
+ }
 
-            function initPdfViewer() {
-                // If PDF.js is available, use it for better control
-                // Otherwise, use iframe with page parameter
-                const iframe = $('#docFrame');
-                const src = iframe.attr('src');
+ .thumbnail-item.active {
+ border-color: var(--primary-color);
+ background: #e3f2fd;
+ }
 
-                // Try to detect total pages (this requires PDF.js or server-side processing)
-                // For now, we'll use a simple approach
-                totalPages = 100; // Default, will be updated if we can detect actual pages
-                $('#totalPages').text(totalPages);
-                updatePageControls();
-                checkBookmark();
-            }
+ .thumbnail-canvas {
+ width:100%;
+ box-shadow:02px4px rgba(0,0,0,0.2);
+ }
 
-            // Initialize auth UI
-            if (window.JwtHelper && window.JwtHelper.isAuthenticated()) {
-                $('.auth-only').show();
-                $('.guest-only').hide();
-                checkBookmark();
-            } else {
-                $('.auth-only').hide();
-                $('.guest-only').show();
-            }
-        });
-    </script>
+ .thumbnail-page {
+ text-align: center;
+ margin-top:5px;
+ font-size:0.85em;
+ }
+
+ /* Loading */
+ .loading-overlay {
+ position: absolute;
+ top:0;
+ left:0;
+ right:0;
+ bottom:0;
+ background: rgba(0,0,0,0.7);
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ color: white;
+ font-size:1.2em;
+ z-index:1000;
+ }
+
+ /* Mobile Responsive */
+ @@media (max-width:768px) {
+ .sidebar
+
+ {
+ position: absolute;
+ left:0;
+ top:0;
+ bottom:0;
+ z-index:100;
+ transform: translateX(-300px);
+ }
+
+ .sidebar.show {
+ transform: translateX(0);
+ }
+
+ .toolbar-group {
+ padding:05px;
+ }
+
+ }
+ </style>
+
+ <div class="viewer-container">
+ <!-- Sidebar -->
+ <div class="sidebar" id="sidebar">
+ <div class="sidebar-header">
+ <h5 class="mb-0">@Model.GetDocumentTitle()</h5>
+ <small class="text-muted">@Model.GetDocumentAuthor()</small>
+ </div>
+
+ <div class="sidebar-tabs">
+ <div class="sidebar-tab active" data-tab="thumbnails">
+ <i class="bi bi-grid-3x3"></i> Thumbnails
+ </div>
+ <div class="sidebar-tab" data-tab="bookmarks">
+ <i class="bi bi-bookmark"></i> Bookmarks
+ </div>
+ </div>
+
+ <div class="sidebar-content">
+ <div class="tab-content active" data-content="thumbnails" id="thumbnailsContainer">
+ <p class="text-muted">Đang tải thumbnails...</p>
+ </div>
+ <div class="tab-content" data-content="bookmarks" id="bookmarksContainer" style="display:none;">
+ <p class="text-muted">Chưa có bookmark nào</p>
+ </div>
+ </div>
+ </div>
+
+ <!-- Main Viewer -->
+ <div class="pdf-viewer-main">
+ <!-- Toolbar -->
+ <div class="pdf-toolbar">
+ <div class="toolbar-group">
+ <button class="toolbar-btn" id="toggleSidebar" title="Toggle Sidebar">
+ <i class="bi bi-layout-sidebar"></i>
+ </button>
+ </div>
+
+ <div class="toolbar-group">
+ <button class="toolbar-btn" id="prevPage" title="Previous Page">
+ <i class="bi bi-chevron-left"></i>
+ </button>
+ <input type="number" id="pageNum" class="page-input" value="1" min="1">
+ <span>/ <span id="pageCount">0</span></span>
+ <button class="toolbar-btn" id="nextPage" title="Next Page">
+ <i class="bi bi-chevron-right"></i>
+ </button>
+ </div>
+
+ <div class="toolbar-group">
+ <button class="toolbar-btn" id="zoomOut" title="Zoom Out">
+ <i class="bi bi-dash-lg"></i>
+ </button>
+ <span id="zoomLevel">100%</span>
+ <button class="toolbar-btn" id="zoomIn" title="Zoom In">
+ <i class="bi bi-plus-lg"></i>
+ </button>
+ <button class="toolbar-btn" id="zoomReset" title="Reset Zoom">
+ <i class="bi bi-arrow-clockwise"></i>
+ </button>
+ </div>
+
+ <div class="toolbar-group">
+ <button class="toolbar-btn" id="searchBtn" title="Search">
+ <i class="bi bi-search"></i> Search
+ </button>
+ <button class="toolbar-btn" id="highlightBtn" title="Highlight Mode">
+ <i class="bi bi-highlighter"></i> Highlight
+ </button>
+ </div>
+
+ <div class="toolbar-group ms-auto">
+ <button class="toolbar-btn" id="downloadBtn" title="Download">
+ <i class="bi bi-download"></i>
+ </button>
+ <button class="toolbar-btn" id="printBtn" title="Print">
+ <i class="bi bi-printer"></i>
+ </button>
+ <a href="/documents" class="toolbar-btn" title="Close">
+ <i class="bi bi-x-lg"></i>
+ </a>
+ </div>
+ </div>
+
+ <!-- Canvas Container -->
+ <div class="canvas-container" id="canvasContainer">
+ <div style="position: relative;">
+ <canvas id="pdfCanvas"></canvas>
+ <div class="text-layer" id="textLayer"></div>
+ <div class="highlight-layer" id="highlightLayer"></div>
+ </div>
+ </div>
+
+ <!-- Search Panel -->
+ <div class="search-panel" id="searchPanel">
+ <div class="d-flex align-items-center mb-2">
+ <input type="text" class="form-control form-control-sm" id="searchInput" placeholder="Tìm kiếm trong tài liệu...">
+ <button class="btn btn-sm btn-primary ms-2" id="searchExecute">
+ <i class="bi bi-search"></i>
+ </button>
+ <button class="btn btn-sm btn-secondary ms-1" id="closeSearch">
+ <i class="bi bi-x"></i>
+ </button>
+ </div>
+ <div id="searchResults" class="search-results"></div>
+ </div>
+
+ <!-- Loading Overlay -->
+ <div class="loading-overlay" id="loadingOverlay">
+ <div class="text-center">
+ <div class="spinner-border text-light" role="status"></div>
+ <div class="mt-3">Đang tải PDF...</div>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ @section Scripts {
+ <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+ <script>
+ // PDF.js Configuration
+ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+ // Global Variables
+ let pdfDoc = null;
+ let pageNum =1;
+ let pageRendering = false;
+ let pageNumPending = null;
+ let scale =1.5;
+ let highlights = [];
+ let bookmarks = [];
+ let isHighlightMode = false;
+ let searchResults = [];
+ let currentSearchIndex = -1;
+
+ const canvas = document.getElementById('pdfCanvas');
+ const ctx = canvas.getContext('2d');
+ const pdfUrl = '@Url.Content(Model.GetFilePath())';
+ const documentId = @Model.GetDocumentId();
+
+ // Load PDF
+ pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
+ pdfDoc = pdf;
+ document.getElementById('pageCount').textContent = pdf.numPages;
+ document.getElementById('loadingOverlay').style.display = 'none';
+
+ renderPage(pageNum);
+ generateThumbnails();
+ loadBookmarks();
+ }).catch(function(error) {
+ console.error('Error loading PDF:', error);
+ document.getElementById('loadingOverlay').innerHTML = '<div class="text-danger">Không thể tải PDF</div>';
+ });
+
+ // Render Page
+ function renderPage(num) {
+ pageRendering = true;
+
+ pdfDoc.getPage(num).then(function(page) {
+ const viewport = page.getViewport({ scale: scale });
+ canvas.height = viewport.height;
+ canvas.width = viewport.width;
+
+ const renderContext = {
+ canvasContext: ctx,
+ viewport: viewport
+ };
+
+ const renderTask = page.render(renderContext);
+ renderTask.promise.then(function() {
+ pageRendering = false;
+ if (pageNumPending !== null) {
+ renderPage(pageNumPending);
+ pageNumPending = null;
+ }
+
+ // Render text layer for selection
+ renderTextLayer(page, viewport);
+
+ // Render highlights
+ renderHighlights();
+ });
+ });
+
+ document.getElementById('pageNum').value = num;
+ }
+
+ // Render Text Layer
+ function renderTextLayer(page, viewport) {
+ const textLayerDiv = document.getElementById('textLayer');
+ textLayerDiv.innerHTML = '';
+ textLayerDiv.style.width = canvas.width + 'px';
+ textLayerDiv.style.height = canvas.height + 'px';
+
+ page.getTextContent().then(function(textContent) {
+ pdfjsLib.renderTextLayer({
+ textContent: textContent,
+ container: textLayerDiv,
+ viewport: viewport,
+ textDivs: []
+ });
+ });
+ }
+
+ // Queue Page Render
+ function queueRenderPage(num) {
+ if (pageRendering) {
+ pageNumPending = num;
+ } else {
+ renderPage(num);
+ }
+ }
+
+ // Navigation
+ document.getElementById('prevPage').addEventListener('click', function() {
+ if (pageNum <=1) return;
+ pageNum--;
+ queueRenderPage(pageNum);
+ });
+
+ document.getElementById('nextPage').addEventListener('click', function() {
+ if (pageNum >= pdfDoc.numPages) return;
+ pageNum++;
+ queueRenderPage(pageNum);
+ });
+
+ document.getElementById('pageNum').addEventListener('change', function() {
+ const num = parseInt(this.value);
+ if (num >0 && num <= pdfDoc.numPages) {
+ pageNum = num;
+ queueRenderPage(pageNum);
+ }
+ });
+
+ // Zoom
+ document.getElementById('zoomIn').addEventListener('click', function() {
+ scale +=0.25;
+ queueRenderPage(pageNum);
+ updateZoomDisplay();
+ });
+
+ document.getElementById('zoomOut').addEventListener('click', function() {
+ if (scale >0.5) {
+ scale -=0.25;
+ queueRenderPage(pageNum);
+ updateZoomDisplay();
+ }
+ });
+
+ document.getElementById('zoomReset').addEventListener('click', function() {
+ scale =1.5;
+ queueRenderPage(pageNum);
+ updateZoomDisplay();
+ });
+
+ function updateZoomDisplay() {
+ document.getElementById('zoomLevel').textContent = Math.round(scale *100) + '%';
+ }
+
+ // Highlight Mode
+ document.getElementById('highlightBtn').addEventListener('click', function() {
+ isHighlightMode = !isHighlightMode;
+ this.classList.toggle('active');
+ canvas.style.cursor = isHighlightMode ? 'crosshair' : 'default';
+ });
+
+ // Text Selection and Highlighting
+ document.getElementById('textLayer').addEventListener('mouseup', function() {
+ if (!isHighlightMode) return;
+
+ const selection = window.getSelection();
+ const selectedText = selection.toString().trim();
+
+ if (selectedText.length >0) {
+ const range = selection.getRangeAt(0);
+ const rect = range.getBoundingClientRect();
+ const canvasRect = canvas.getBoundingClientRect();
+
+ const highlight = {
+ page: pageNum,
+ text: selectedText,
+ x: rect.left - canvasRect.left,
+ y: rect.top - canvasRect.top,
+ width: rect.width,
+ height: rect.height
+ };
+
+ if (confirm(`Lưu bookmark: "${selectedText.substring(0,50)}..."?`)) {
+ saveBookmark(highlight);
+ }
+
+ selection.removeAllRanges();
+ }
+ });
+
+ // Render Highlights
+ function renderHighlights() {
+ const highlightLayer = document.getElementById('highlightLayer');
+ highlightLayer.innerHTML = '';
+ highlightLayer.style.width = canvas.width + 'px';
+ highlightLayer.style.height = canvas.height + 'px';
+
+ bookmarks.filter(b => b.page === pageNum).forEach(function(bookmark, index) {
+ const div = document.createElement('div');
+ div.className = 'highlight';
+ div.style.left = bookmark.x + 'px';
+ div.style.top = bookmark.y + 'px';
+ div.style.width = bookmark.width + 'px';
+ div.style.height = bookmark.height + 'px';
+ div.title = bookmark.text;
+ div.onclick = function() {
+ if (confirm('Xóa bookmark này?')) {
+ deleteBookmark(index);
+ }
+ };
+ highlightLayer.appendChild(div);
+ });
+ }
+
+ // Save Bookmark
+ function saveBookmark(highlight) {
+ const bookmark = {
+ id: Date.now(),
+ documentId: documentId,
+ page: highlight.page,
+ text: highlight.text,
+ x: highlight.x,
+ y: highlight.y,
+ width: highlight.width,
+ height: highlight.height,
+ timestamp: new Date().toISOString()
+ };
+
+ bookmarks.push(bookmark);
+ localStorage.setItem('pdf_bookmarks_' + documentId, JSON.stringify(bookmarks));
+
+ renderHighlights();
+ displayBookmarks();
+
+ // Show notification
+ alert('✅ Đã lưu bookmark!');
+ }
+
+ // Load Bookmarks
+ function loadBookmarks() {
+ const stored = localStorage.getItem('pdf_bookmarks_' + documentId);
+ if (stored) {
+ bookmarks = JSON.parse(stored);
+ displayBookmarks();
+ }
+ }
+
+ // Display Bookmarks
+ function displayBookmarks() {
+ const container = document.getElementById('bookmarksContainer');
+
+ if (bookmarks.length ===0) {
+ container.innerHTML = '<p class="text-muted">Chưa có bookmark nào. Bôi đen text và save để tạo bookmark.</p>';
+ return;
+ }
+
+ container.innerHTML = bookmarks.map((bookmark, index) => `
+ <div class="bookmark-item" onclick="gotoBookmark(${bookmark.page})">
+ <div>
+ <strong>Bookmark ${index +1}</strong>
+ <span class="delete-bookmark" onclick="event.stopPropagation(); deleteBookmark(${index})">
+ <i class="bi bi-trash"></i>
+ </span>
+ </div>
+ <div class="bookmark-text">${bookmark.text}</div>
+ <div class="bookmark-page">Trang ${bookmark.page}</div>
+ </div>
+ `).join('');
+ }
+
+ // Delete Bookmark
+ function deleteBookmark(index) {
+ bookmarks.splice(index,1);
+ localStorage.setItem('pdf_bookmarks_' + documentId, JSON.stringify(bookmarks));
+ displayBookmarks();
+ renderHighlights();
+ }
+
+ // Goto Bookmark
+ function gotoBookmark(page) {
+ pageNum = page;
+ queueRenderPage(pageNum);
+ }
+
+ // Search
+ document.getElementById('searchBtn').addEventListener('click', function() {
+ document.getElementById('searchPanel').classList.toggle('active');
+ document.getElementById('searchInput').focus();
+ });
+
+ document.getElementById('closeSearch').addEventListener('click', function() {
+ document.getElementById('searchPanel').classList.remove('active');
+ });
+
+ document.getElementById('searchExecute').addEventListener('click', performSearch);
+ document.getElementById('searchInput').addEventListener('keypress', function(e) {
+ if (e.key === 'Enter') performSearch();
+ });
+
+ async function performSearch() {
+ const query = document.getElementById('searchInput').value.trim().toLowerCase();
+ if (!query) return;
+
+ searchResults = [];
+ const resultsDiv = document.getElementById('searchResults');
+ resultsDiv.innerHTML = '<div class="text-muted">Đang tìm kiếm...</div>';
+
+ for (let i =1; i <= pdfDoc.numPages; i++) {
+ const page = await pdfDoc.getPage(i);
+ const textContent = await page.getTextContent();
+ const text = textContent.items.map(item => item.str).join(' ');
+
+ if (text.toLowerCase().includes(query)) {
+ const index = text.toLowerCase().indexOf(query);
+ const context = text.substring(Math.max(0, index -50), Math.min(text.length, index +100));
+ searchResults.push({ page: i, context: context });
+ }
+ }
+
+ if (searchResults.length ===0) {
+ resultsDiv.innerHTML = '<div class="text-muted">Không tìm thấy kết quả</div>';
+ } else {
+ resultsDiv.innerHTML = searchResults.map((result, index) => `
+ <div class="search-result-item" onclick="gotoSearchResult(${index})">
+ <strong>Trang ${result.page}</strong><br>
+ <small>...${result.context}...</small>
+ </div>
+ `).join('');
+ }
+ }
+
+ function gotoSearchResult(index) {
+ pageNum = searchResults[index].page;
+ queueRenderPage(pageNum);
+ currentSearchIndex = index;
+
+ // Highlight active result
+ document.querySelectorAll('.search-result-item').forEach((item, i) => {
+ item.classList.toggle('active', i === index);
+ });
+ }
+
+ // Generate Thumbnails
+ async function generateThumbnails() {
+ const container = document.getElementById('thumbnailsContainer');
+ container.innerHTML = '';
+
+ for (let i =1; i <= Math.min(pdfDoc.numPages,20); i++) {
+ const page = await pdfDoc.getPage(i);
+ const viewport = page.getViewport({ scale:0.3 });
+
+ const thumbnailCanvas = document.createElement('canvas');
+ const thumbnailCtx = thumbnailCanvas.getContext('2d');
+ thumbnailCanvas.height = viewport.height;
+ thumbnailCanvas.width = viewport.width;
+
+ await page.render({
+ canvasContext: thumbnailCtx,
+ viewport: viewport
+ }).promise;
+
+ const div = document.createElement('div');
+ div.className = 'thumbnail-item';
+ if (i === pageNum) div.classList.add('active');
+ div.onclick = function() {
+ pageNum = i;
+ queueRenderPage(pageNum);
+ document.querySelectorAll('.thumbnail-item').forEach(item => item.classList.remove('active'));
+ div.classList.add('active');
+ };
+
+ thumbnailCanvas.className = 'thumbnail-canvas';
+ div.appendChild(thumbnailCanvas);
+
+ const pageLabel = document.createElement('div');
+ pageLabel.className = 'thumbnail-page';
+ pageLabel.textContent = 'Trang ' + i;
+ div.appendChild(pageLabel);
+
+ container.appendChild(div);
+ }
+ }
+
+ // Sidebar Toggle
+ document.getElementById('toggleSidebar').addEventListener('click', function() {
+ document.getElementById('sidebar').classList.toggle('collapsed');
+ });
+
+ // Sidebar Tabs
+ document.querySelectorAll('.sidebar-tab').forEach(tab => {
+ tab.addEventListener('click', function() {
+ const target = this.dataset.tab;
+
+ document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+ this.classList.add('active');
+
+ document.querySelectorAll('.tab-content').forEach(content => {
+ content.style.display = content.dataset.content === target ? 'block' : 'none';
+ });
+ });
+ });
+
+ // Download
+ document.getElementById('downloadBtn').addEventListener('click', function() {
+ window.open(pdfUrl, '_blank');
+ });
+
+ // Print
+ document.getElementById('printBtn').addEventListener('click', function() {
+ window.open(pdfUrl, '_blank');
+ });
+
+ // Keyboard Shortcuts
+ document.addEventListener('keydown', function(e) {
+ if (e.ctrlKey || e.metaKey) {
+ if (e.key === 'f') {
+ e.preventDefault();
+ document.getElementById('searchBtn').click();
+ }
+ } else if (e.key === 'ArrowLeft') {
+ document.getElementById('prevPage').click();
+ } else if (e.key === 'ArrowRight') {
+ document.getElementById('nextPage').click();
+ }
+ });
+ </script>
+ }
+}
+else
+{
+ <style>
+ .viewer-container {
+ display: flex;
+ height: calc(100vh -60px);
+ position: fixed;
+ top:60px;
+ left:0;
+ right:0;
+ bottom:0;
+ }
+ .file-toolbar {
+ background: #323639;
+ padding:10px20px;
+ display: flex;
+ align-items: center;
+ gap:10px;
+ color: white;
+ }
+ .file-viewer {
+ flex:1;
+ display: flex;
+ align-items: stretch;
+ justify-content: center;
+ background: #f5f5f5;
+ }
+ .file-frame {
+ width:100%;
+ height: calc(100vh -120px);
+ border: none;
+ }
+ .text-display {
+ width:90%;
+ height: calc(100vh -120px);
+ overflow: auto;
+ background: white;
+ padding:20px;
+ border-radius:6px;
+ box-shadow:04px12px rgba(0,0,0,0.1);
+ font-family: monospace;
+ white-space: pre-wrap;
+ }
+ </style>
+
+ <div class="viewer-container">
+ <div class="file-toolbar">
+ <div>
+ <strong>@Model.GetDocumentTitle()</strong>
+ <div class="text-muted">@Model.GetDocumentAuthor()</div>
+ </div>
+ <div style="margin-left:auto;">
+ <button class="toolbar-btn" id="downloadBtn" title="Download">
+ <i class="bi bi-download"></i>
+ </button>
+ <button class="toolbar-btn" id="printBtn" title="Print">
+ <i class="bi bi-printer"></i>
+ </button>
+ <a href="/documents" class="toolbar-btn" title="Close">
+ <i class="bi bi-x-lg"></i>
+ </a>
+ </div>
+ </div>
+
+ <div class="file-viewer" id="fileViewer">
+ @if (ext == ".txt")
+ {
+ <div class="text-display" id="textContent">Đang tải...</div>
+ }
+ else
+ {
+ var iframeSrc = useOfficeViewer ? ($"https://view.officeapps.live.com/op/view.aspx?src={Uri.EscapeDataString(absoluteFileUrl)}") : fileUrl;
+ <iframe id="fileFrame" class="file-frame" src="@iframeSrc"></iframe>
+ }
+ </div>
+ </div>
+
+ @section Scripts {
+ <script>
+ (function(){
+ const fileUrl = '@fileUrl';
+ const ext = '@ext';
+
+ document.getElementById('downloadBtn').addEventListener('click', function(){
+ window.open(fileUrl, '_blank');
+ });
+
+ document.getElementById('printBtn').addEventListener('click', function(){
+ const frame = document.getElementById('fileFrame');
+ if (frame && frame.contentWindow) {
+ try { frame.contentWindow.focus(); frame.contentWindow.print(); return; } catch(e) { /* fallback */ }
+ }
+ window.open(fileUrl, '_blank');
+ });
+
+ if (ext === '.txt') {
+ fetch(fileUrl).then(r => r.text()).then(t => {
+ const el = document.getElementById('textContent');
+ el.textContent = t;
+ }).catch(() => {
+ document.getElementById('textContent').textContent = 'Không thể tải nội dung văn bản.';
+ });
+ }
+ })();
+ </script>
+ }
 }

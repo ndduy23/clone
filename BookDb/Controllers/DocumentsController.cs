@@ -8,7 +8,6 @@ using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
 
 [Route("documents")]
-[Authorize] // Require authentication for all actions
 public class DocumentsController : Controller
 {
     private readonly IDocumentService _docService;
@@ -22,6 +21,7 @@ public class DocumentsController : Controller
 
     // GET /documents
     [HttpGet("")]
+    [AllowAnonymous]
     public async Task<IActionResult> Index(string? q, int page =1, int pageSize =20, bool onlyMine = false)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -40,6 +40,7 @@ public class DocumentsController : Controller
 
     // GET /documents/create
     [HttpGet("create")]
+    [Authorize]
     public IActionResult Create()
     {
         var viewModel = new CreateModel();
@@ -49,7 +50,7 @@ public class DocumentsController : Controller
     // POST /documents/create (MVC)
     [HttpPost("create")]
     [ValidateAntiForgeryToken]
-    [Authorize(Policy = Policies.CanEditDocuments)]
+    [Authorize]
     public async Task<IActionResult> Create(IFormFile file, string title, string category, string author, string description, int? authorId)
     {
         try
@@ -67,6 +68,7 @@ public class DocumentsController : Controller
 
     // GET /documents/view/{id}
     [HttpGet("view/{id}")]
+    [AllowAnonymous]
     public async Task<IActionResult> ViewDocument(int id, int page =1, string mode = "original")
     {
         var document = await _docService.GetDocumentForViewingAsync(id);
@@ -109,6 +111,7 @@ public class DocumentsController : Controller
     // POST /documents/delete/{id}
     [HttpPost("delete/{id}")]
     [ValidateAntiForgeryToken]
+    [Authorize]
     public async Task<IActionResult> Delete(int id)
     {
         var doc = await _docService.GetDocumentByIdAsync(id);
@@ -129,6 +132,7 @@ public class DocumentsController : Controller
 
     // GET /documents/edit/{id}
     [HttpGet("edit/{id}")]
+    [Authorize]
     public async Task<IActionResult> Edit(int id)
     {
         var doc = await _docService.GetDocumentByIdAsync(id);
@@ -149,6 +153,7 @@ public class DocumentsController : Controller
     // POST /documents/edit/{id}
     [HttpPost("edit/{id}")]
     [ValidateAntiForgeryToken]
+    [Authorize]
     public async Task<IActionResult> Edit(int id, IFormFile? file, string title, string category, string author, string description)
     {
         var doc = await _docService.GetDocumentByIdAsync(id);
@@ -182,6 +187,7 @@ public class DocumentsController : Controller
     }
 
     [HttpGet("edit-page/{id}")]
+    [Authorize]
     public async Task<IActionResult> EditPage(int id)
     {
         var page = await _docService.GetDocumentPageByIdAsync(id);
@@ -190,6 +196,7 @@ public class DocumentsController : Controller
     }
 
     [HttpGet("bookmark")]
+    [Authorize] // Any authenticated user can view their bookmarks
     public async Task<IActionResult> Bookmark()
     {
         var bookmarks = await _docService.GetBookmarksAsync();

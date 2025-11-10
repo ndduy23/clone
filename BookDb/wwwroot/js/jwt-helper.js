@@ -293,11 +293,22 @@ window.JwtHelper = (function () {
         const user = getUser();
         const isAuth = isAuthenticated();
         const roles = getUserRoles();
+        const isAdmin = hasRole('Admin');
 
         if (isAuth && user) {
             // User is logged in
-            $('.auth-required').show();
+            // Show controls for any authenticated user
+            $('.auth-only').show();
             $('.guest-only').hide();
+
+            // Show admin-only and auth-required only for admins
+            if (isAdmin) {
+                $('.admin-only').show();
+                $('.auth-required').show();
+            } else {
+                $('.admin-only').hide();
+                $('.auth-required').hide();
+            }
 
             // Update user info
             $('#authUserName').text(user.fullName || user.email || 'User');
@@ -311,6 +322,8 @@ window.JwtHelper = (function () {
         } else {
             // User is not logged in
             $('.auth-required').hide();
+            $('.auth-only').hide();
+            $('.admin-only').hide();
             $('.guest-only').show();
             console.log('User not authenticated');
         }

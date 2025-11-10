@@ -117,7 +117,7 @@ namespace BookDb.Controllers.Api
 
         // POST: api/admin/users/{id}/toggle-active
         [HttpPost("users/{id}/toggle-active")]
-        [Authorize(Roles = Roles.Admin)]
+        [Authorize(Policy = Policies.RequireAdminRole)]
         public async Task<IActionResult> ToggleUserActive(string id)
         {
             try
@@ -271,7 +271,7 @@ namespace BookDb.Controllers.Api
 
         // DELETE: api/admin/users/{id}
         [HttpDelete("users/{id}")]
-        [Authorize(Roles = Roles.Admin)]
+        [Authorize(Policy = Policies.RequireAdminRole)]
         public async Task<IActionResult> DeleteUser(string id)
         {
             try

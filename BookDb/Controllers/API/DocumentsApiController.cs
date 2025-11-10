@@ -10,7 +10,6 @@ namespace BookDb.Controllers.Api
 {
     [Route("api/documents")]
     [ApiController]
-    [Authorize] // Require authentication
     public class DocumentsApiController : ControllerBase
     {
         private readonly IDocumentService _docService;
@@ -29,7 +28,7 @@ namespace BookDb.Controllers.Api
 
         // GET api/documents
         [HttpGet]
-        [AllowAnonymous] // Allow guests to view
+        [AllowAnonymous]
         public async Task<IActionResult> GetDocuments([FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] bool onlyMine = false)
         {
             try
@@ -71,7 +70,7 @@ namespace BookDb.Controllers.Api
 
         // GET api/documents/{id}
         [HttpGet("{id}")]
-        [AllowAnonymous] // Allow guests to view
+        [AllowAnonymous]
         public async Task<IActionResult> GetDocument(int id)
         {
             try
@@ -107,7 +106,7 @@ namespace BookDb.Controllers.Api
         // DELETE api/documents/{id}
         [HttpDelete("{id}")]
         [ValidateAntiForgeryToken]
-        [Authorize] // Chỉ cần đăng nhập
+        [Authorize]
         public async Task<IActionResult> DeleteDocument(int id)
         {
             try
@@ -147,7 +146,7 @@ namespace BookDb.Controllers.Api
 
         // POST api/documents/upload
         [HttpPost("upload")]
-        [Authorize] // Chỉ cần đăng nhập, không cần policy đặc biệt
+        [Authorize]
         [RequestSizeLimit(100_000_000)] //100MB limit
         public async Task<IActionResult> UploadDocument([FromForm] IFormFile file,
             [FromForm] string title,
@@ -231,7 +230,7 @@ namespace BookDb.Controllers.Api
         // PUT api/documents/{id}
         [HttpPut("{id}")]
         [ValidateAntiForgeryToken]
-        [Authorize] // Chỉ cần đăng nhập
+        [Authorize]
         public async Task<IActionResult> UpdateDocument(int id,
             [FromForm] IFormFile? file,
             [FromForm] string title,

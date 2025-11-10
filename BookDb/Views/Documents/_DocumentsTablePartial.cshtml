@@ -1,3 +1,4 @@
+@using BookDb.Models
 @model BookDb.Views.Documents.IndexModel
 
 @foreach (var item in Model.Documents)
@@ -9,39 +10,55 @@
         <td>@Model.GetFormattedDate(item.CreatedAt)</td>
         <td>
             <!-- View button - available for everyone -->
-            <a asp-action="ViewDocument" asp-route-id="@item.Id"
+            <a asp-action="ViewDocument" asp-route-id="@(item.Id)"
                class="btn btn-sm btn-success">
                 <i class="bi bi-eye"></i> Xem
             </a>
 
-            @* Only show edit/delete when viewing "My Documents" list *@
-            @if (Model.OnlyMine)
-            {
-                <span class="auth-only">
-                    <a asp-action="Edit" asp-route-id="@item.Id"
-                       class="btn btn-sm btn-warning">
-                        <i class="bi bi-pencil"></i> Sửa
-                    </a>
-                    <button type="button" class="btn btn-sm btn-danger delete-btn"
-                            data-id="@item.Id" data-title="@item.Title">
-                        <i class="bi bi-trash"></i> Xóa
-                    </button>
-                </span>
+            @* Permission logic:
+ - When viewing all documents (OnlyMine == false): only Admin sees Edit/Delete for each document.
+ - When viewing only the user's documents (OnlyMine == true): Admin and the owner see Edit/Delete.
+ *@
+@if (User?.Identity?.IsAuthenticated == true)
+{
+    var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    var isOwner = !string.IsNullOrEmpty(userId) && !string.IsNullOrEmpty(item.OwnerId) && string.Equals(item.OwnerId, userId, StringComparison.OrdinalIgnoreCase);
+    var isAdmin = User.IsInRole(Roles.Admin);
 
-                <!-- Disabled buttons for guests (only on My Documents view) -->
-                <span class="guest-only" style="display:none;">
-                    <div class="auth-required-overlay" style="display:inline-block;">
-                        <button class="btn btn-sm btn-secondary disabled-for-guest">
-                            <i class="bi bi-pencil"></i> Sửa
-                        </button>
-                    </div>
-                    <div class="auth-required-overlay" style="display:inline-block;">
-                        <button class="btn btn-sm btn-secondary disabled-for-guest">
-                            <i class="bi bi-trash"></i> Xóa
-                        </button>
-                    </div>
-                </span>
-            }
+    var canManage = false;
+
+    if (!Model.OnlyMine)
+    {
+        // Viewing all documents: only Admin may manage
+        if (isAdmin)
+        {
+            canManage = true;
+        }
+    }
+    else
+    {
+        // Viewing only the user's documents: Admin or the owner may manage
+        if (isAdmin || isOwner)
+        {
+            canManage = true;
+        }
+    }
+
+    if (canManage)
+    {
+        <a asp-action="Edit" asp-route-id="@(item.Id)" class="btn btn-sm btn-warning ms-1">
+            <i class="bi bi-pencil"></i> Sửa
+        </a>
+
+        <form method="post" asp-action="Delete" asp-route-id="@(item.Id)" class="d-inline-block ms-1">
+            @Html.AntiForgeryToken()
+            <!-- Visible submit button used for non-JS fallback; JS will intercept to perform AJAX -->
+            <button type="submit" class="btn btn-sm btn-danger delete-btn" data-id="@(item.Id)" data-title="@(item.Title)">
+                <i class="bi bi-trash"></i> Xóa
+            </button>
+        </form>
+    }
+}
         </td>
     </tr>
 }
@@ -50,7 +67,7 @@
 {
     <tr>
         <td colspan="5" class="text-center text-muted py-4">
-            <i class="bi bi-inbox" style="font-size: 32px;"></i>
+            <i class="bi bi-inbox" style="font-size:32px;"></i>
             <p class="mt-2">Không có tài liệu nào</p>
         </td>
     </tr>
