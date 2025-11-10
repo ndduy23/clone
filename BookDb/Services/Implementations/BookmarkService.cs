@@ -30,7 +30,7 @@ namespace BookDb.Services.Implementations
             _logger = logger;
         }
 
-        public async Task<List<Bookmark>> GetBookmarksAsync(string? q)
+        public async Task<List<Bookmark>> GetBookmarksAsync(string? q, string? userId = null, bool onlyMine = false)
         {
             var query = _context.Bookmarks
                 .Include(b => b.Document)
@@ -41,6 +41,11 @@ namespace BookDb.Services.Implementations
                 query = query.Where(b =>
                     EF.Functions.Like(b.Title ?? "", $"%{q}%") ||
                     (b.Document != null && EF.Functions.Like(b.Document.Title, $"%{q}%")));
+            }
+
+            if (onlyMine && !string.IsNullOrEmpty(userId))
+            {
+                query = query.Where(b => b.UserId == userId);
             }
 
             return await query

@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookDb.Controllers.Admin
 {
- [Area("")]
+ [Area("Admin")]
  [Route("admin/authors")]
  [Authorize(Roles = Roles.Admin)]
  public class AuthorsController : Controller

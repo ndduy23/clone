@@ -27,7 +27,7 @@ public class DocumentsController : Controller
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var list = await _docService.GetDocumentsAsync(q, userId, onlyMine, page, pageSize);
         var viewModel = new IndexModel();
-        viewModel.Initialize(list, q);
+        viewModel.Initialize(list, q, onlyMine);
 
         // Return partial view for AJAX requests
         if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")

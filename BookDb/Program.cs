@@ -257,7 +257,16 @@ try
         app.UseHsts();
     }
 
-    app.UseHttpsRedirection();
+    if (app.Environment.IsDevelopment())
+    {
+        // Allow HTTP in development
+        app.UseHttpsRedirection();
+    }
+    else
+    {
+        app.UseHsts();
+        app.UseHttpsRedirection();
+    }
     app.UseStaticFiles();
 
     // Tùy biến lỗi từ 400–599

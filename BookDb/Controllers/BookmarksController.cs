@@ -28,7 +28,9 @@ namespace BookDb.Controllers
         [HttpGet("")]
         public async Task<IActionResult> Index(string? q)
         {
-            var bookmarks = await _bookmarkService.GetBookmarksAsync(q);
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            // Only show current user's bookmarks in this UI
+            var bookmarks = await _bookmarkService.GetBookmarksAsync(q, userId, onlyMine: true);
             var viewModel = new IndexModel();
             viewModel.Initialize(bookmarks, q);
             

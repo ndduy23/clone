@@ -8,16 +8,18 @@ namespace BookDb.Views.Documents
     {
         public IEnumerable<Document> Documents { get; set; } = Enumerable.Empty<Document>();
         public string? SearchQuery { get; set; }
+        public bool OnlyMine { get; set; } = false;
         public string Title => "Danh sách tài liệu";
 
         public IndexModel()
         {
         }
 
-        public void Initialize(IEnumerable<Document> documents, string? searchQuery)
+        public void Initialize(IEnumerable<Document> documents, string? searchQuery, bool onlyMine = false)
         {
             Documents = documents ?? Enumerable.Empty<Document>();
             SearchQuery = searchQuery;
+            OnlyMine = onlyMine;
         }
 
         public string GetFormattedDate(DateTime date)

@@ -14,31 +14,34 @@
                 <i class="bi bi-eye"></i> Xem
             </a>
 
-            <!-- Edit & Delete - only for authenticated users -->
-            <span class="auth-only">
-                <a asp-action="Edit" asp-route-id="@item.Id"
-                   class="btn btn-sm btn-warning">
-                    <i class="bi bi-pencil"></i> Sửa
-                </a>
-                <button type="button" class="btn btn-sm btn-danger delete-btn"
-                        data-id="@item.Id" data-title="@item.Title">
-                    <i class="bi bi-trash"></i> Xóa
-                </button>
-            </span>
-
-            <!-- Disabled buttons for guests -->
-            <span class="guest-only" style="display:none;">
-                <div class="auth-required-overlay" style="display:inline-block;">
-                    <button class="btn btn-sm btn-secondary disabled-for-guest">
+            @* Only show edit/delete when viewing "My Documents" list *@
+            @if (Model.OnlyMine)
+            {
+                <span class="auth-only">
+                    <a asp-action="Edit" asp-route-id="@item.Id"
+                       class="btn btn-sm btn-warning">
                         <i class="bi bi-pencil"></i> Sửa
-                    </button>
-                </div>
-                <div class="auth-required-overlay" style="display:inline-block;">
-                    <button class="btn btn-sm btn-secondary disabled-for-guest">
+                    </a>
+                    <button type="button" class="btn btn-sm btn-danger delete-btn"
+                            data-id="@item.Id" data-title="@item.Title">
                         <i class="bi bi-trash"></i> Xóa
                     </button>
-                </div>
-            </span>
+                </span>
+
+                <!-- Disabled buttons for guests (only on My Documents view) -->
+                <span class="guest-only" style="display:none;">
+                    <div class="auth-required-overlay" style="display:inline-block;">
+                        <button class="btn btn-sm btn-secondary disabled-for-guest">
+                            <i class="bi bi-pencil"></i> Sửa
+                        </button>
+                    </div>
+                    <div class="auth-required-overlay" style="display:inline-block;">
+                        <button class="btn btn-sm btn-secondary disabled-for-guest">
+                            <i class="bi bi-trash"></i> Xóa
+                        </button>
+                    </div>
+                </span>
+            }
         </td>
     </tr>
 }
