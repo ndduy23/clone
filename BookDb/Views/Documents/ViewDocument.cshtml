@@ -223,6 +223,14 @@
         transform-origin:0%0%;
     }
 
+    /* Highlight mark styling for search */
+    .text-layer mark, .generic-viewer mark {
+        background: rgba(255,255,0,0.6);
+        color: inherit;
+        padding:02px;
+        border-radius:2px;
+    }
+
     /* Generic Content Viewer */
     .generic-viewer {
         background: white;
@@ -866,6 +874,13 @@
 
  renderHighlights();
  updatePageInfo();
+ // re-apply search highlight if current search is on this page
+ setTimeout(() => {
+ const query = document.getElementById('searchInput').value.trim();
+ if (query && STATE.currentSearchIndex >=0 && STATE.searchResults[STATE.currentSearchIndex] && STATE.searchResults[STATE.currentSearchIndex].page === STATE.currentPage) {
+ highlightSearchInViewer(query);
+ }
+ },150);
  }
 
  // Text Viewer
@@ -907,6 +922,11 @@
  }
 
  updatePageInfo();
+ // re-apply search highlight
+ const query = document.getElementById('searchInput').value.trim();
+ if (query && STATE.currentSearchIndex >=0 && STATE.searchResults[STATE.currentSearchIndex] && STATE.searchResults[STATE.currentSearchIndex].page === STATE.currentPage) {
+ highlightSearchInViewer(query);
+ }
  }
 
  // DOCX Viewer
@@ -953,6 +973,11 @@
  }
 
  updatePageInfo();
+ // re-apply search highlight
+ const query = document.getElementById('searchInput').value.trim();
+ if (query && STATE.currentSearchIndex >=0 && STATE.searchResults[STATE.currentSearchIndex] && STATE.searchResults[STATE.currentSearchIndex].page === STATE.currentPage) {
+ highlightSearchInViewer(query);
+ }
  }
 
  // Excel Viewer
@@ -991,6 +1016,11 @@
  `;
 
  updatePageInfo();
+ // re-apply search highlight
+ const query = document.getElementById('searchInput').value.trim();
+ if (query && STATE.currentSearchIndex >=0 && STATE.searchResults[STATE.currentSearchIndex] && STATE.searchResults[STATE.currentSearchIndex].page === STATE.currentPage) {
+ highlightSearchInViewer(query);
+ }
  }
 
  // Pagination
@@ -1320,6 +1350,8 @@
  <div class="search-result-context">...${escapeHtml(result.context)}...</div>
  </div>
  `).join('');
+ // automatically go to first result and highlight
+ gotoSearchResult(0);
  }
  }
 
@@ -1330,6 +1362,12 @@
  document.querySelectorAll('.search-result-item').forEach((item, i) => {
  item.classList.toggle('active', i === index);
  });
+
+ // Wait briefly for page rendering then apply highlight
+ setTimeout(() => {
+ const query = document.getElementById('searchInput').value.trim();
+ if (query) highlightSearchInViewer(query);
+ },200);
  }
 
  // Zoom
@@ -1401,6 +1439,91 @@
  div.onclick = () => deleteBookmark(bookmark.id);
  layer.appendChild(div);
  });
+ }
+
+ // Clear previous search highlights
+ function clearSearchHighlights() {
+ // remove <mark> in textLayer
+ const textLayer = document.getElementById('textLayer');
+ if (textLayer) {
+ const marks = textLayer.querySelectorAll('mark');
+ marks.forEach(m => {
+ const parent = m.parentNode;
+ if (!parent) return;
+ parent.replaceChild(document.createTextNode(m.textContent), m);
+ });
+ }
+
+ // remove <mark> in generic viewer
+ const generic = document.getElementById('genericViewer');
+ if (generic) {
+ const marksG = generic.querySelectorAll('mark');
+ marksG.forEach(m => {
+ const parent = m.parentNode;
+ if (!parent) return;
+ parent.replaceChild(document.createTextNode(m.textContent), m);
+ });
+ }
+ }
+
+ // Highlight occurrences in viewer by wrapping matches in <mark>
+ function highlightSearchInViewer(query) {
+ if (!query) return;
+ const q = query.toLowerCase();
+ clearSearchHighlights();
+
+ if (CONFIG.fileExt === 'pdf') {
+ const textLayer = document.getElementById('textLayer');
+ if (!textLayer) return;
+ const spans = Array.from(textLayer.querySelectorAll('span'));
+ spans.forEach(span => {
+ const text = span.textContent || '';
+ const lower = text.toLowerCase();
+ if (lower.includes(q)) {
+ // safe replacement: build innerHTML by replacing matched substrings
+ // escape HTML is not necessary since spans contain plain text
+ const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig');
+ span.innerHTML = text.replace(regex, match => `<mark>${match}</mark>`);
+ }
+ });
+ } else {
+ // Walk text nodes inside generic viewer and wrap matches
+ const viewer = document.getElementById('genericViewer');
+ if (!viewer) return;
+ const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig');
+
+ function walk(node) {
+ if (node.nodeType === Node.TEXT_NODE) {
+ const text = node.nodeValue;
+ if (!text) return;
+ if (text.toLowerCase().includes(q)) {
+ const frag = document.createDocumentFragment();
+ let lastIndex =0;
+ text.replace(regex, (match, offset) => {
+ // text from lastIndex to offset
+ if (offset > lastIndex) {
+ frag.appendChild(document.createTextNode(text.substring(lastIndex, offset)));
+ }
+ const mark = document.createElement('mark');
+ mark.textContent = match;
+ frag.appendChild(mark);
+ lastIndex = offset + match.length;
+ });
+ if (lastIndex < text.length) {
+ frag.appendChild(document.createTextNode(text.substring(lastIndex)));
+ }
+ node.parentNode.replaceChild(frag, node);
+ }
+ } else if (node.nodeType === Node.ELEMENT_NODE && node.childNodes && node.tagName.toLowerCase() !== 'script' && node.tagName.toLowerCase() !== 'style') {
+ // avoid replacing inside mark itself
+ if (node.tagName.toLowerCase() === 'mark') return;
+ const children = Array.from(node.childNodes);
+ children.forEach(child => walk(child));
+ }
+ }
+
+ walk(viewer);
+ }
  }
 
  // Event Listeners
