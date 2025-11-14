@@ -1,4 +1,4 @@
-using BookDb.Models;
+Ôªøusing BookDb.Models;
 using BookDb.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -50,12 +50,12 @@ namespace BookDb.Controllers.Admin
             if (doc == null) return NotFound();
 
             var success = await _docService.DeleteDocumentAsync(id);
-            if (!success) return BadRequest(new { success = false, message = "KhÙng th? xÛa t‡i li?u" });
+            if (!success) return BadRequest(new { success = false, message = "Kh√¥ng th·ªÉ x√≥a t√†i li·ªáu" });
 
             // If AJAX request, return JSON
             if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
             {
-                return Ok(new { success = true, message = "?„ xÛa" });
+                return Ok(new { success = true, message = "ƒê√£ x√≥a" });
             }
 
             return RedirectToAction("Index");
