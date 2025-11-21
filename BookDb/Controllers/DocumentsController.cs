@@ -154,7 +154,7 @@ public class DocumentsController : Controller
     [HttpPost("edit/{id}")]
     [ValidateAntiForgeryToken]
     [Authorize]
-    public async Task<IActionResult> Edit(int id, IFormFile? file, string title, string category, string author, string description)
+    public async Task<IActionResult> Edit(int id, IFormFile? file, string title, string category, int? authorId, string description)
     {
         var doc = await _docService.GetDocumentByIdAsync(id);
         if (doc == null) return NotFound();
@@ -166,7 +166,7 @@ public class DocumentsController : Controller
             return Forbid();
         }
 
-        var success = await _docService.UpdateDocumentAsync(id, file, title, category, author, description);
+        var success = await _docService.UpdateDocumentAsync(id, file, title, category, authorId, description);
         if (!success) return NotFound();
 
         var updatedDoc = await _docService.GetDocumentByIdAsync(id);

@@ -142,16 +142,32 @@ namespace BookDb.Services.Implementations
             return true;
         }
 
-        public async Task<bool> UpdateDocumentAsync(int id, IFormFile? file, string title, string category, string author, string description)
+        public async Task<bool> UpdateDocumentAsync(int id, IFormFile? file, string title, string category, int? authorId, string description)
         {
             var doc = await _docRepo.GetByIdAsync(id);
             if (doc == null) return false;
 
             doc.Title = title;
             doc.Category = category;
-            doc.Author = author;
             doc.Description = description;
             doc.UpdatedAt = DateTime.UtcNow;
+
+            // Update author information
+            if (authorId.HasValue && authorId.Value > 0)
+            {
+                var author = await _context.Authors.FindAsync(authorId.Value);
+                if (author != null)
+                {
+                    doc.AuthorId = authorId.Value;
+                    doc.Author = author.Name;
+                }
+            }
+            else
+            {
+                // Clear author if none selected
+                doc.AuthorId = null;
+                doc.Author = string.Empty;
+            }
 
             // Update file if provided
             if (file != null && file.Length > 0)

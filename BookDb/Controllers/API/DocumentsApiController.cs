@@ -235,7 +235,7 @@ namespace BookDb.Controllers.Api
             [FromForm] IFormFile? file,
             [FromForm] string title,
             [FromForm] string category,
-            [FromForm] string author,
+            [FromForm] int? authorId,
             [FromForm] string description)
         {
             try
@@ -252,7 +252,8 @@ namespace BookDb.Controllers.Api
                     return Forbid();
                 }
 
-                var success = await _docService.UpdateDocumentAsync(id, file, title, category, author, description);
+                // Pass authorId instead of author string
+                var success = await _docService.UpdateDocumentAsync(id, file, title, category, authorId, description);
 
                 if (!success)
                     return NotFound(new { success = false, message = "Không tìm thấy tài liệu" });

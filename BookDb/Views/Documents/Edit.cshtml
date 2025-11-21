@@ -11,8 +11,13 @@
     }
 
     @@keyframes fieldHighlight {
-        0%, 100% { background-color: transparent; }
-        50% { background-color: #cfe2ff; }
+        0%, 100% {
+            background-color: transparent;
+        }
+
+        50% {
+            background-color: #cfe2ff;
+        }
     }
 
     .editing-indicator {
@@ -21,8 +26,15 @@
     }
 
     @@keyframes slideInDown {
-        from { transform: translateY(-100%); opacity: 0; }
-        to { transform: translateY(0); opacity: 1; }
+        from {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
     }
 
     #editing-indicators-container {
@@ -38,8 +50,10 @@
 <h2>Sửa tài liệu</h2>
 
 <form asp-action="Edit" asp-route-id="@Model.GetDocumentId()" enctype="multipart/form-data" method="post" id="editDocumentForm">
+    @Html.AntiForgeryToken()
+
     <div class="mb-3">
-        <label class="form-label">Tiêu đề</label>
+        <label class="form-label">Tiêu đề <span class="text-danger">*</span></label>
         <input name="title" id="title" value="@Model.Document.Title" class="form-control" required data-field-name="title" />
     </div>
 
@@ -50,36 +64,171 @@
 
     <div class="mb-3">
         <label class="form-label">Tác giả</label>
-        <input name="author" id="author" value="@Model.Document.Author" class="form-control" data-field-name="author" />
+        <div class="d-flex gap-2">
+            <select name="authorId" id="authorId" class="form-select" data-field-name="authorId">
+                <option value="">-- Chọn tác giả --</option>
+            </select>
+            <button type="button" id="addAuthorBtn" class="btn btn-outline-secondary admin-only" style="display:none;">
+                <i class="bi bi-plus"></i> Thêm tác giả
+            </button>
+        </div>
+        <small class="form-text text-muted">Chỉ Admin có quyền thêm tác giả mới.</small>
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Mô tả</label>
+        <textarea name="description" id="description" class="form-control" rows="4" data-field-name="description">@Model.Document.Description</textarea>
     </div>
 
     <div class="mb-3">
         <label class="form-label">File mới (nếu muốn thay thế)</label>
-        <input type="file" name="file" class="form-control" />
+        <input type="file" name="file" class="form-control" accept=".pdf,.docx,.txt,.xlsx,.doc,.xls" />
         @if (Model.HasFile())
         {
-            <p>File hiện tại: <a href="@Model.GetFileUrl()" target="_blank">📄 Xem file</a></p>
+            <div class="mt-2">
+                <small class="text-muted">File hiện tại: </small>
+                <a href="@Model.GetFileUrl()" target="_blank" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-file-earmark"></i> @Model.Document.FileName
+                </a>
+            </div>
         }
     </div>
 
-    <button type="submit" class="btn btn-primary">Cập nhật</button>
-    <a asp-action="Index" class="btn btn-secondary">Hủy</a>
+    <div class="mb-3">
+        <button type="submit" class="btn btn-primary" id="submitBtn">
+            <i class="bi bi-save"></i> Cập nhật
+        </button>
+        <a asp-action="Index" class="btn btn-secondary">
+            <i class="bi bi-x-circle"></i> Hủy
+        </a>
+    </div>
 </form>
+
+<!-- Add Author Modal -->
+<div class="modal fade" id="addAuthorModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Thêm tác giả</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Tên tác giả <span class="text-danger">*</span></label>
+                    <input type="text" id="newAuthorName" class="form-control" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Tiểu sử</label>
+                    <textarea id="newAuthorBio" class="form-control" rows="3"></textarea>
+                </div>
+                <div id="addAuthorError" class="alert alert-danger d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="saveAuthorBtn" class="btn btn-primary">
+                    <i class="bi bi-save"></i> Lưu
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 @section Scripts {
     <script src="~/js/document-editing-realtime.js"></script>
     <script>
         $(document).ready(function() {
-            // Initialize real-time editing
             const documentId = @Model.GetDocumentId();
             const documentTitle = '@Model.GetSafeTitle()';
-            const userName = '@Model.GenerateUserName()'; // TODO: Get from authentication
-            
+            const currentAuthorId = @(Model.Document.AuthorId ?? 0);
+
+            // Initialize real-time editing
+            const userName = window.JwtHelper.getUser()?.fullName || 'User';
             window.DocumentEditingRealtime.init(documentId, userName);
+
+            // Load authors
+            loadAuthors(currentAuthorId);
+
+            // Update author UI based on role
+            function updateAuthorUI() {
+                if (window.JwtHelper && window.JwtHelper.hasRole && window.JwtHelper.hasRole('Admin')) {
+                    $('#addAuthorBtn').show();
+                } else {
+                    $('#addAuthorBtn').hide();
+                }
+            }
+
+            function loadAuthors(selectedId) {
+                $.ajax({
+                    url: '/api/authors',
+                    type: 'GET',
+                    success: function (res) {
+                        if (res && res.data) {
+                            const $sel = $('#authorId');
+                            $sel.find('option:not(:first)').remove();
+
+                            res.data.forEach(function (a) {
+                                const selected = a.id === selectedId ? 'selected' : '';
+                                $sel.append(`<option value="${a.id}" ${selected}>${a.name}</option>`);
+                            });
+                        }
+                    },
+                    error: function () {
+                        console.warn('Không thể tải danh sách tác giả');
+                    }
+                });
+            }
+
+            // Add author modal
+            $('#addAuthorBtn').on('click', function () {
+                $('#addAuthorError').addClass('d-none');
+                $('#newAuthorName').val('');
+                $('#newAuthorBio').val('');
+                const modal = new bootstrap.Modal(document.getElementById('addAuthorModal'));
+                modal.show();
+            });
+
+            $('#saveAuthorBtn').on('click', function () {
+                const name = $('#newAuthorName').val().trim();
+                const bio = $('#newAuthorBio').val().trim();
+
+                if (!name) {
+                    $('#addAuthorError').removeClass('d-none').text('Tên tác giả là bắt buộc');
+                    return;
+                }
+
+                $.ajax({
+                    url: '/api/authors',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ name: name, bio: bio || null }),
+                    headers: { 'Authorization': 'Bearer ' + (window.JwtHelper ? window.JwtHelper.getToken() : '') },
+                    success: function (res) {
+                        if (res && res.success) {
+                            loadAuthors(res.data.id);
+                            const modalEl = document.getElementById('addAuthorModal');
+                            const modal = bootstrap.Modal.getInstance(modalEl);
+                            modal.hide();
+
+                            if (window.NotificationHub) {
+                                window.NotificationHub.showLocal('Đã thêm tác giả', 'success');
+                            }
+                        } else {
+                            $('#addAuthorError').removeClass('d-none').text(res.message || 'Lỗi');
+                        }
+                    },
+                    error: function (xhr) {
+                        let msg = 'Không thể thêm tác giả';
+                        if (xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = xhr.responseJSON.message;
+                        }
+                        $('#addAuthorError').removeClass('d-none').text(msg);
+                    }
+                });
+            });
 
             // Track when user starts editing
             let editingStarted = false;
-            $('input[data-field-name], textarea[data-field-name]').on('focus', function() {
+            $('input[data-field-name], textarea[data-field-name], select[data-field-name]').on('focus', function() {
                 if (!editingStarted) {
                     editingStarted = true;
                     window.DocumentEditingRealtime.startEditing(documentTitle);
@@ -88,7 +237,7 @@
 
             // Track field changes and notify in real-time
             let debounceTimers = {};
-            $('input[data-field-name], textarea[data-field-name]').on('input', function() {
+            $('input[data-field-name], textarea[data-field-name], select[data-field-name]').on('input change', function() {
                 const $field = $(this);
                 const fieldName = $field.data('field-name');
                 const newValue = $field.val();
@@ -107,7 +256,9 @@
             $('#editDocumentForm').on('submit', function() {
                 window.DocumentEditingRealtime.stopEditing();
             });
+
+            // Initialize UI
+            updateAuthorUI();
         });
     </script>
 }
-
